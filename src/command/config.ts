@@ -1,0 +1,215 @@
+import inquirer from "inquirer";
+import spfm from "../spfm";
+import config from "../spfm-config";
+import { SPFMDeviceConfig } from "../type";
+import commandLineArgs from "command-line-args";
+import commandLineUsage from "command-line-usage";
+import spfmConfig from "../spfm-config";
+import chalk from "chalk";
+import { getCompatibleDevices } from "../spfm-mapper";
+
+const clocks = [
+  { name: "1789773Hz", value: 1789773 },
+  { name: "3579545Hz", value: 3579545 },
+  { name: "4000000Hz", value: 4000000 },
+  { name: "7670454Hz", value: 7670454 },
+  { name: "7987200Hz", value: 7987200 },
+  { name: "8000000Hz", value: 8000000 },
+  { name: "Unknown", value: 0 }
+];
+
+function getDefaultClockIndex(chip: string) {
+  const clock = getDefaultClock(chip);
+  return clocks.findIndex(e => e.value === clock);
+}
+
+function getDefaultClock(chip: string) {
+  switch (chip) {
+    case "ym3812":
+    case "ym3526":
+    case "ym2413":
+    case "y8950":
+    case "scc1":
+      return 3579545;
+    case "ym2203":
+    case "ym2151":
+      return 4000000;
+    case "ym2612":
+      return 7670454;
+    case "ym2608":
+      return 8000000;
+    case "ay8910":
+      return 1789773;
+    case "ymf262":
+      return 14318180;
+    case "ymf278b":
+      return 33868800;
+    default:
+      return 0;
+  }
+}
+
+export function printConfig() {
+  for (let d of spfmConfig.deviceConfigs) {
+    console.log(chalk.underline(chalk.bold(`\n${d.path}\n`)));
+    for (let i = 0; i < 2; i++) {
+      const m = d.modules[i];
+      const mod = `SLOT${i}:`;
+      if (m.type) {
+        const type = d.modules[i].type.toUpperCase();
+        const clock = `${d.modules[i].clock}Hz`;
+        const compats = getCompatibleDevices(m.type);
+        const ctext = 0 < compats.length ? "c/w " + compats.map(e => e.toUpperCase()).join(" ") : "";
+        console.log(`- ${mod} ${type} ${clock} ${chalk.grey(ctext)}`);
+      } else {
+        console.log(chalk.grey(`- ${mod} ${"EMPTY"}`));
+      }
+    }
+  }
+  console.log("");
+}
+
+export default async function main(argv: string[]) {
+  const optionDefinitions = [
+    { name: "show", type: Boolean, alias: "s", description: "Show current configuration." },
+    { name: "help", type: Boolean, alias: "h", description: "Show this help." }
+  ];
+  const sections = [
+    {
+      header: "spfm-config",
+      content: "Configure settings interactively."
+    },
+    {
+      header: "SYNOPSIS",
+      content: ["{underline spfm} {underline config} [<option>]"]
+    },
+    {
+      header: "OPTIONS",
+      optionList: optionDefinitions
+    },
+    {
+      header: "FILES",
+      content: [
+        "{underline $HOME/.config/node-spfm/config.json} is user-specific configuration file. If {bold $XDG_CONFIG_HOME} is set, {underline $XDG_CONFIG_HOME/node-spfm/config.json} will be used."
+      ]
+    },
+    {
+      header: "SUPPORTED DEVICES",
+      content: ["SPFM Light"]
+    },
+    {
+      header: "SUPPORTED MODULES",
+      content: [
+        "AY-3-8910 (PSG)",
+        "SN76489 (DPSG)",
+        "YM2203 (OPN)",
+        "YM2608 (OPNA)",
+        "YM2413 (OPLL)",
+        "YM3526 (OPL)",
+        "YM3812 (OPL2)"
+      ]
+    }
+  ];
+  const options = commandLineArgs(optionDefinitions, { argv });
+  if (options.help) {
+    console.log(commandLineUsage(sections));
+    return;
+  }
+
+  if (options.show) {
+    printConfig();
+    return;
+  }
+
+  const spfms = await spfm.list();
+
+  if (spfms.length === 0) {
+    throw new Error("No device found. Connect SPFM Light and try again.");
+    return;
+  }
+
+  const names = spfms.map(e => e.comName);
+  const chips = [
+    { name: "none", value: null },
+    { name: "AY8910 (PSG)", value: "ay8910" },
+    { name: "YM2151 (OPM)", value: "ym2151" },
+    { name: "YM2203 (OPN)", value: "ym2203" },
+    { name: "YM2413 (OPLL)", value: "ym2413" },
+    { name: "YM2612 (OPN2)", value: "ym2612" },
+    { name: "YM2608 (OPNA)", value: "ym2608" },
+    { name: "YM3526 (OPL)", value: "ym3526" },
+    { name: "YM3812 (OPL2)", value: "ym3812" },
+    { name: "Y8950 (OPL)", value: "y8950" },
+    { name: "YMF262 (OPL3)", value: "ymf262" },
+    { name: "K053260 (SCC)", value: "scc1" },
+    { name: "SN76489 (DPSG)", value: "sn76489" }
+  ];
+
+  const answer: SPFMDeviceConfig = await inquirer.prompt([
+    { name: "path", type: "list", choices: names, message: "Select device to configure:" },
+    {
+      name: "modules.0.type",
+      type: "list",
+      choices: chips,
+      message: "Select 1st module:",
+      default: (ans: any) => {
+        const device = config.findDeviceConfigByPath(ans.path);
+        if (device) {
+          return chips.findIndex(e => device.modules[0].type === e.value);
+        }
+        return -1;
+      }
+    },
+    {
+      name: "modules.0.clock",
+      type: "list",
+      choices: clocks,
+      message: (ans: any) => `Select 1st module clock:`,
+      when: (ans: any) => {
+        return ans.modules[0].type != undefined;
+      },
+      default: (ans: any) => {
+        const device = config.findDeviceConfigByPath(ans.path);
+        if (device && device.modules[0].type == ans.modules[0].type) {
+          return clocks.findIndex(e => device.modules[0].clock === e.value);
+        }
+        return getDefaultClockIndex(ans.modules[0].type);
+      }
+    },
+    {
+      name: "modules.1.type",
+      type: "list",
+      choices: chips,
+      message: "Select 2nd module:",
+      default: (ans: any) => {
+        const device = config.findDeviceConfigByPath(ans.path);
+        if (device) {
+          return chips.findIndex(e => device.modules[1].type === e.value);
+        }
+        return -1;
+      }
+    },
+    {
+      name: "modules.1.clock",
+      type: "list",
+      choices: clocks,
+      message: (ans: any) => `Select 2nd module clock:`,
+      when: (ans: any) => {
+        return ans.modules[1].type != undefined;
+      },
+      default: (ans: any) => {
+        const device = config.findDeviceConfigByPath(ans.path);
+        if (device && device.modules[1].type == ans.modules[1].type) {
+          return clocks.findIndex(e => device.modules[1].clock === e.value);
+        }
+        return getDefaultClockIndex(ans.modules[1].type);
+      }
+    }
+  ]);
+
+  answer.modules[0].slot = 0;
+  answer.modules[1].slot = 1;
+
+  config.writeDeviceConfig(answer);
+  console.info(`Saved: ${config._cfgFile}`);
+}
