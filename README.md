@@ -6,9 +6,11 @@ A command-line controller for [SPFM-Light](http://www.pyonpyon.jp/~gasshi/fm/spf
 
 This screen shot is node-spfm running under [cool-retro-term](https://github.com/Swordfish90/cool-retro-term).
 
-# Caveat
+# Requirements
+- Node 10 or later environment on macOS and Linux is required. 
+- SPFM Light device.
 
-This program works on Windows 10 with proper console (ex. bash console in Visual Studio Code), however, playback speed is not stabilized.
+This program works also on Windows 10 with proper console (ex. bash console in Visual Studio Code), however, playback speed is not stabilized.
 
 # Supported File Types
 
