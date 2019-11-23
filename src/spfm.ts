@@ -32,7 +32,7 @@ export default class SPFM {
         result.push({ ...port, type: spfm.type });
         await spfm.close();
       } catch (e) {
-        // not a SPFM.
+        console.error(e.message); // not a SPFM or permission denied.
       }
     }
     return result;

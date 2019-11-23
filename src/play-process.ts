@@ -123,7 +123,7 @@ async function play(file: string, options: CommandLineOptions) {
     await player.play();
     stdoutSync("\nPlaying finished.\n");
   } catch (e) {
-    console.error(e);
+    console.error(e.message);
     exitCode = 1;
   } finally {
     await mapper.close();
