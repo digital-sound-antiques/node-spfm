@@ -22,8 +22,7 @@ This program works on Windows 10 with proper console (ex. bash console in Visual
 
 # Supported Modules
 
-- AY-3-8910 (PSG) 
-- SN76489 (DPSG)  
+- AY-3-8910 (PSG)  
 - YM2203 (OPN)    
 - YM2608 (OPNA)   
 - YM2413 (OPLL)   
