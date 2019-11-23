@@ -122,15 +122,20 @@ export default async function main(argv: string[]) {
   }
 
   const spfms = await spfm.list();
+  const names = spfms.map(e => e.comName);
+  for (const d of spfmConfig.deviceConfigs) {
+    if (names.indexOf(d.path) < 0) {
+      names.push(d.path);
+    }
+  }
 
-  if (spfms.length === 0) {
+  if (names.length === 0) {
     throw new Error("No device found. Connect SPFM Light and try again.");
     return;
   }
 
-  const names = spfms.map(e => e.comName);
   const chips = [
-    { name: "none", value: null },
+    { name: "(none)", value: null },
     { name: "AY8910 (PSG)", value: "ay8910" },
     { name: "YM2151 (OPM)", value: "ym2151" },
     { name: "YM2203 (OPN)", value: "ym2203" },
