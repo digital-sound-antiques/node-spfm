@@ -16,11 +16,9 @@
   ],
   "scripts": {
     "tslint-check": "tslint-config-prettier-check ./tslint.json",
-    "build": "tsc",
-    "spfmplay": "ts-node src/index.ts"
+    "build": "tsc"
   },
   "dependencies": {
-    "@types/command-line-usage": "^5.0.1",
     "chalk": "^3.0.0",
     "command-line-args": "^5.1.1",
     "command-line-usage": "^6.1.0",
@@ -33,6 +31,7 @@
     "vgm-parser": "^0.1.1"
   },
   "devDependencies": {
+    "@types/command-line-usage": "^5.0.1",
     "@types/command-line-args": "^5.0.0",
     "@types/fs-extra": "^8.0.1",
     "@types/inquirer": "^6.5.0",
