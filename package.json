@@ -46,6 +46,10 @@
     "tslint-plugin-prettier": "^2.0.1",
     "typescript": "^3.4.5"
   },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/digital-sound-antiques/node-spfm.git"
+  },
   "engines": {
     "node": ">=10.0.0"
   }
