@@ -44,7 +44,7 @@ export default async function(argv: string[]) {
   }
 
   console.info("List of devices attached");
-  if (options.list) {
+  if (options.long) {
     console.info(
       devices
         .map((d, i) => {
