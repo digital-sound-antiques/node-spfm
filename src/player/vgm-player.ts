@@ -251,7 +251,7 @@ export default class VGMPlayer implements Player<VGM> {
   }
 
   async play() {
-    const sleepType = process.platform === "win32" ? "busyloop" : "atomics";
+    const sleepType = "atomics";
 
     this._headSamples = this._vgm!.samples.total - (this._vgm!.samples.loop || 0);
     this._loopSamples = this._vgm!.samples.loop || this._vgm!.samples.total;
