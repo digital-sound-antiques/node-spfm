@@ -27,7 +27,7 @@
     "keypress": "^0.2.1",
     "libkss-js": "^0.11.3",
     "microtime": "^3.0.0",
-    "serialport": "^7.1.5",
+    "serialport": "^8.0.5",
     "vgm-parser": "^0.1.1"
   },
   "devDependencies": {
@@ -37,7 +37,6 @@
     "@types/inquirer": "^6.5.0",
     "@types/microtime": "^2.1.0",
     "@types/node": "^12.12.8",
-    "@types/serialport": "^7.0.4",
     "prettier": "^1.19.1",
     "rm-cli": "^1.4.2",
     "ts-node": "^8.4.1",

@@ -21,6 +21,10 @@ export default class SPFM {
       dataBits: 8,
       parity: "none",
       stopBits: 1,
+      xon: false,
+      xoff: false,
+      xany: false,
+      rtscts: false,
       highWaterMark: 256 * 1024,
       autoOpen: false
     });
@@ -36,7 +40,7 @@ export default class SPFM {
     const result: SPFMPortInfo[] = [];
     for (let portInfo of portInfos) {
       try {
-        const spfm = new SPFM(portInfo.comName);
+        const spfm = new SPFM(portInfo.path);
         await spfm.open();
         result.push({ ...portInfo, type: spfm.type });
         await spfm.close();
@@ -137,8 +141,7 @@ export default class SPFM {
 
   async write(data: number[]): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      this._port.write(data);
-      this._port.drain(err => {
+      this._port.write(data, err => {
         if (err) {
           reject(err);
         } else {

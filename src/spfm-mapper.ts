@@ -61,7 +61,7 @@ export default class SPFMMapper {
         if (port == null) {
           throw new Error("Can't find the device ${id}.");
         }
-        const spfm = new SPFM(port.comName);
+        const spfm = new SPFM(port.path);
         await spfm.open();
         this._spfms.push(spfm);
         for (const module of modules) {

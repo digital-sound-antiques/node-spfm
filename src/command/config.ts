@@ -134,7 +134,7 @@ export default async function main(argv: string[]) {
   const spfms = await spfm.list();
   const names = spfms.map(e => {
     return {
-      name: `${e.serialNumber} (${e.comName})`,
+      name: `${e.serialNumber} (${e.path})`,
       value: e.serialNumber,
       short: e.serialNumber
     };

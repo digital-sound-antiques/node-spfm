@@ -48,7 +48,7 @@ export default async function(argv: string[]) {
     console.info(
       devices
         .map((d, i) => {
-          return `${d.comName}\t${d.type}\tserial:${d.serialNumber} manufacture:${d.manufacturer} product:${d.productId} vendor:${d.vendorId}`;
+          return `${d.path}\t${d.type}\tserial:${d.serialNumber} manufacture:${d.manufacturer} product:${d.productId} vendor:${d.vendorId}`;
         })
         .join("\n")
     );
@@ -56,7 +56,7 @@ export default async function(argv: string[]) {
     console.info(
       devices
         .map((d, i) => {
-          return `${d.comName}\t${d.type}`;
+          return `${d.path}\t${d.type}`;
         })
         .join("\n")
     );
