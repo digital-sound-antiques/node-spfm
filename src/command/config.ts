@@ -1,12 +1,10 @@
 import inquirer from "inquirer";
 import spfm from "../spfm";
-import config from "../spfm-config";
-import { SPFMDeviceConfig } from "../type";
 import commandLineArgs from "command-line-args";
 import commandLineUsage from "command-line-usage";
-import spfmConfig from "../spfm-config";
+import SPFMMapperConfig, { SPFMDeviceConfig } from "../spfm-mapper-config";
 import chalk from "chalk";
-import { getCompatibleDevices } from "../spfm-mapper";
+import SPFMMapper, { getCompatibleDevices } from "../spfm-mapper";
 
 const clocks = [
   { name: "1789773Hz", value: 1789773 },
@@ -50,8 +48,8 @@ function getDefaultClock(chip: string) {
 }
 
 export function printConfig() {
-  for (let d of spfmConfig.deviceConfigs) {
-    console.log(chalk.underline(chalk.bold(`\n${d.path}\n`)));
+  for (let d of SPFMMapperConfig.default.devices) {
+    console.log(chalk.underline(chalk.bold(`\n${d.id}\n`)));
     for (let i = 0; i < 2; i++) {
       const m = d.modules[i];
       const mod = `SLOT${i}:`;
@@ -72,6 +70,7 @@ export function printConfig() {
 export default async function main(argv: string[]) {
   const optionDefinitions = [
     { name: "show", type: Boolean, alias: "s", description: "Show current configuration." },
+    { name: "clear", type: Boolean, alias: "c", description: "Clear all configuration data." },
     { name: "help", type: Boolean, alias: "h", description: "Show this help." }
   ];
   const sections = [
@@ -90,7 +89,7 @@ export default async function main(argv: string[]) {
     {
       header: "FILES",
       content: [
-        "{underline $HOME/.config/node-spfm/config.json} is user-specific configuration file. If {bold $XDG_CONFIG_HOME} is set, {underline $XDG_CONFIG_HOME/node-spfm/config.json} will be used."
+        "{underline $HOME/.config/node-spfm} is used as configuration directory. If {bold $XDG_CONFIG_HOME} is set, {underline $XDG_CONFIG_HOME/node-spfm} will be used."
       ]
     },
     {
@@ -112,7 +111,7 @@ export default async function main(argv: string[]) {
   ];
   const options = commandLineArgs(optionDefinitions, { argv });
   if (options.help) {
-    console.log(commandLineUsage(sections));
+    console.info(commandLineUsage(sections));
     return;
   }
 
@@ -121,17 +120,38 @@ export default async function main(argv: string[]) {
     return;
   }
 
+  if (options.clear) {
+    const answer = await inquirer.prompt([
+      { name: "confirm", type: "confirm", message: "Are you sure to clear configuration?" }
+    ]);
+    if (answer.confirm) {
+      SPFMMapperConfig.default.clear();
+      console.info("Done.");
+    }
+    return;
+  }
+
   const spfms = await spfm.list();
-  const names = spfms.map(e => e.comName);
-  for (const d of spfmConfig.deviceConfigs) {
-    if (names.indexOf(d.path) < 0) {
-      names.push(d.path);
+  const names = spfms.map(e => {
+    return {
+      name: `${e.serialNumber} (${e.comName})`,
+      value: e.serialNumber,
+      short: e.serialNumber
+    };
+  });
+
+  for (const d of SPFMMapperConfig.default.devices) {
+    if (names.findIndex(e => e.value === d.id) < 0) {
+      names.push({
+        name: `${d.id} (Offline)`,
+        value: d.id,
+        short: d.id
+      });
     }
   }
 
   if (names.length === 0) {
     throw new Error("No device found. Connect SPFM Light and try again.");
-    return;
   }
 
   const chips = [
@@ -151,14 +171,14 @@ export default async function main(argv: string[]) {
   ];
 
   const answer: SPFMDeviceConfig = await inquirer.prompt([
-    { name: "path", type: "list", choices: names, message: "Select device to configure:" },
+    { name: "id", type: "list", choices: names, message: "Select device to configure:" },
     {
       name: "modules.0.type",
       type: "list",
       choices: chips,
       message: "Select 1st module:",
       default: (ans: any) => {
-        const device = config.findDeviceConfigByPath(ans.path);
+        const device = SPFMMapperConfig.default.findDeviceById(ans.id);
         if (device) {
           return chips.findIndex(e => device.modules[0].type === e.value);
         }
@@ -174,7 +194,7 @@ export default async function main(argv: string[]) {
         return ans.modules[0].type != undefined;
       },
       default: (ans: any) => {
-        const device = config.findDeviceConfigByPath(ans.path);
+        const device = SPFMMapperConfig.default.findDeviceById(ans.id);
         if (device && device.modules[0].type == ans.modules[0].type) {
           return clocks.findIndex(e => device.modules[0].clock === e.value);
         }
@@ -187,7 +207,7 @@ export default async function main(argv: string[]) {
       choices: chips,
       message: "Select 2nd module:",
       default: (ans: any) => {
-        const device = config.findDeviceConfigByPath(ans.path);
+        const device = SPFMMapperConfig.default.findDeviceById(ans.id);
         if (device) {
           return chips.findIndex(e => device.modules[1].type === e.value);
         }
@@ -203,7 +223,7 @@ export default async function main(argv: string[]) {
         return ans.modules[1].type != undefined;
       },
       default: (ans: any) => {
-        const device = config.findDeviceConfigByPath(ans.path);
+        const device = SPFMMapperConfig.default.findDeviceById(ans.id);
         if (device && device.modules[1].type == ans.modules[1].type) {
           return clocks.findIndex(e => device.modules[1].clock === e.value);
         }
@@ -215,6 +235,6 @@ export default async function main(argv: string[]) {
   answer.modules[0].slot = 0;
   answer.modules[1].slot = 1;
 
-  config.writeDeviceConfig(answer);
-  console.info(`Saved: ${config._cfgFile}`);
+  SPFMMapperConfig.default.updateDevice(answer);
+  console.info(`Updated: ${SPFMMapperConfig.default.file}`);
 }

@@ -6,8 +6,7 @@ import { ChildProcess, fork } from "child_process";
 import commandLineArgs from "command-line-args";
 import { formatMinSec } from "vgm-parser";
 import commandLineUsage from "command-line-usage";
-import { KSSPlay } from "libkss-js";
-import spfmConfig from "../spfm-config";
+import SPFMMapperConfig from "../spfm-mapper-config";
 
 function getHeaderString() {
   return `SPFM Player
@@ -22,6 +21,19 @@ Playlist File:  ${file}
 Playlist Entry: ${entry} / ${entries.length}
 `
     : "";
+}
+
+function getGaugeString(current: number, total: number, width: number) {
+  const progress = Math.round((current / total) * width);
+  const array = [];
+  for (let i = 0; i < width; i++) {
+    if (i < progress) {
+      array.push(">");
+    } else {
+      array.push("-");
+    }
+  }
+  return array.join("");
 }
 
 function loadM3UPlayList(file: string) {
@@ -94,7 +106,7 @@ export default async function main(argv: string[]) {
     return;
   }
 
-  if (spfmConfig.deviceConfigs.length === 0) {
+  if (SPFMMapperConfig.default.devices.length === 0) {
     throw new Error("No configurations. Try `spfm config` first.");
   }
 
@@ -189,6 +201,12 @@ export default async function main(argv: string[]) {
                 );
               } else {
                 process.stdout.write(`Playing\t${formatMinSec(msg.current)} seconds\r`);
+              }
+            } else if (msg.type === "ram_write") {
+              if (msg.total) {
+                process.stdout.write(`${msg.title} [${getGaugeString(msg.current, msg.total, 16)}]              \r`);
+              } else {
+                process.stdout.write(`${msg.title}...`);
               }
             }
           });

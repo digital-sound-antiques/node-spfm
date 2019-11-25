@@ -1,5 +1,6 @@
 import SerialPort, { parsers } from "serialport";
-import { SPFMType } from "./type";
+
+export type SPFMType = "SPFM" | "SPFM_Light" | null;
 
 export type SPFMPortInfo = SerialPort.PortInfo & {
   type: SPFMType;
@@ -17,19 +18,27 @@ export default class SPFM {
     this._baudRate = baudRate;
     this._port = new SerialPort(path, {
       baudRate: this._baudRate,
+      dataBits: 8,
+      parity: "none",
+      stopBits: 1,
+      highWaterMark: 256 * 1024,
       autoOpen: false
     });
     this._port.setEncoding("utf-8");
   }
 
-  static async list() {
-    const ports = (await SerialPort.list()).filter(p => p.vendorId === "0403");
+  static async rawList(): Promise<SerialPort.PortInfo[]> {
+    return (await SerialPort.list()).filter(p => p.vendorId === "0403");
+  }
+
+  static async list(): Promise<SPFMPortInfo[]> {
+    const portInfos = await this.rawList();
     const result: SPFMPortInfo[] = [];
-    for (let port of ports) {
+    for (let portInfo of portInfos) {
       try {
-        const spfm = new SPFM(port.comName);
+        const spfm = new SPFM(portInfo.comName);
         await spfm.open();
-        result.push({ ...port, type: spfm.type });
+        result.push({ ...portInfo, type: spfm.type });
         await spfm.close();
       } catch (e) {
         console.error(e.message); // not a SPFM or permission denied.
@@ -126,12 +135,10 @@ export default class SPFM {
     });
   }
 
-  async write(data: string | number[] | Buffer) {
-    if (!this._port.isOpen) {
-      return;
-    }
+  async write(data: number[]): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      this._port.write(data, err => {
+      this._port.write(data);
+      this._port.drain(err => {
         if (err) {
           reject(err);
         } else {
@@ -141,7 +148,7 @@ export default class SPFM {
     });
   }
 
-  async writeRegNoWait(slot: number, port: number, a: number, d: number) {
+  async writeReg(slot: number, port: number, a: number, d: number) {
     if (this.type === "SPFM_Light") {
       await this.write([slot & 1, (port & 7) << 1, a, d]);
     } else if (this.type === "SPFM") {
@@ -153,21 +160,9 @@ export default class SPFM {
     }
   }
 
-  async writeReg(slot: number, port: number, a: number, d: number) {
-    if (this.type === "SPFM_Light") {
-      await this.write([slot & 1, (port & 7) << 1, a, d, 0x80]);
-    } else if (this.type === "SPFM") {
-      if (this.isHighSpeed) {
-        await this.write([((slot & 7) << 4) | (port & 3), a, d, 0x80]);
-      } else {
-        await this.write([((slot & 7) << 4) | (port & 3), a, d]);
-      }
-    }
-  }
-
   async writeData(slot: number, d: number) {
     if (this.type === "SPFM_Light") {
-      await this.write([slot & 1, 0x20, d, 0x80]);
+      await this.write([slot & 1, 0x20, d]);
     }
   }
 }

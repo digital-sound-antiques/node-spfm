@@ -1,6 +1,5 @@
 import commandLineArgs from "command-line-args";
 import commandLineUsage from "command-line-usage";
-import SPFMConfig from "../spfm-config";
 
 import chalk from "chalk";
 

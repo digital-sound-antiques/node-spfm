@@ -1,5 +1,5 @@
 import SPFM from "./spfm";
-import { SPFMDeviceConfig } from "./type";
+import SPFMMapperConfig from "./spfm-mapper-config";
 
 export class ReBirthModule {
   parent: SPFM;
@@ -17,10 +17,6 @@ export class ReBirthModule {
 
   async writeReg(port: number, a: number, d: number) {
     return this.parent.writeReg(this.slot, port, a, d);
-  }
-
-  async writeRegNoWait(port: number, a: number, d: number) {
-    return this.parent.writeRegNoWait(this.slot, port, a, d);
   }
 
   getDebugString() {
@@ -46,20 +42,26 @@ export function getCompatibleDevices(chip: string) {
 }
 
 export default class SPFMMapper {
-  _devices: SPFMDeviceConfig[];
+  _config: SPFMMapperConfig;
   _spfms: SPFM[] = [];
   _spfmMap: { [key: string]: ReBirthModule } = {};
 
-  constructor(devices: SPFMDeviceConfig[]) {
-    this._devices = devices;
+  constructor(config: SPFMMapperConfig) {
+    this._config = config;
   }
 
   async open() {
     const spfms: { [key: string]: SPFM } = {};
-    for (const device of this._devices) {
-      const { path, modules } = device;
+    const ports = await SPFM.rawList();
+
+    for (const device of this._config.devices) {
+      const { id, modules } = device;
       try {
-        const spfm = new SPFM(path);
+        const port = ports.find(e => e.serialNumber === id);
+        if (port == null) {
+          throw new Error("Can't find the device ${id}.");
+        }
+        const spfm = new SPFM(port.comName);
         await spfm.open();
         this._spfms.push(spfm);
         for (const module of modules) {
@@ -75,7 +77,7 @@ export default class SPFMMapper {
           }
         }
       } catch (e) {
-        console.info(`Device ${path} is not connected.`);
+        console.info(e.message);
       }
     }
     return spfms;
@@ -96,13 +98,6 @@ export default class SPFMMapper {
     const mod = this.getModule(type);
     if (mod) {
       await mod.writeReg(port, a, d);
-    }
-  }
-
-  async writeRegNoWait(type: string, port: number, a: number, d: number) {
-    const mod = this.getModule(type);
-    if (mod) {
-      await mod.writeRegNoWait(port, a, d);
     }
   }
 

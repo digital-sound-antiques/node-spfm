@@ -29,11 +29,7 @@ export default class CommandBuffer {
       const cmd = this._buf.shift();
       if (cmd) {
         if (cmd.a >= 0) {
-          if (cmd.nowait) {
-            await mapper.writeRegNoWait(cmd.type, cmd.port, cmd.a, cmd.d);
-          } else {
-            await mapper.writeReg(cmd.type, cmd.port, cmd.a, cmd.d);
-          }
+          await mapper.writeReg(cmd.type, cmd.port, cmd.a, cmd.d);
         } else {
           await mapper.writeData(cmd.type, cmd.d);
         }

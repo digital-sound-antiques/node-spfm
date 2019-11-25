@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import config from "./spfm-config";
+import SPFMMapperConfig from "./spfm-mapper-config";
 
 import commandLineArgs, { CommandLineOptions } from "command-line-args";
 
@@ -20,7 +20,7 @@ async function stdoutSync(message: string) {
   });
 }
 
-const mapper = new SPFMMapper(config.deviceConfigs);
+const mapper = new SPFMMapper(SPFMMapperConfig.default);
 
 function toArrayBuffer(b: Buffer) {
   return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);

@@ -111,17 +111,26 @@ export default class VGMPlayer implements Player<VGM> {
     return offset;
   }
 
+  async _ramWriteProgress(title: string, current: number, total: number) {
+    if (process.send) {
+      new Promise(resolve => {
+        process.send!({ type: "ram_write", title, current, total }, () => resolve());
+      });
+    }
+  }
+
   async _YM2608RamWrite(address: number, data: number[]) {
     let start = address;
     let stop = start + data.length - 1;
     const limit = 0xffff;
-
-    console.log("YM2608 RAM Write [start=" + start + " size=" + data.length + "]");
+    const chip = "ym2608";
+    const title = `YM2608 ADPCM (0x${("0000" + start.toString(16)).slice(-5)})`;
 
     start >>= 5;
     stop >>= 5;
 
-    const mod = this._mapper.getModule("ym2608");
+    const mod = this._mapper.getModule(chip);
+
     if (mod) {
       await mod.writeReg(1, 0x10, 0x13); // BRDY EOS Enable
       await mod.writeReg(1, 0x10, 0x80); // Rest Flags
@@ -135,9 +144,12 @@ export default class VGMPlayer implements Player<VGM> {
       await mod.writeReg(1, 0x0d, limit >> 8);
 
       for (let i = 0; i < data.length; i++) {
-        await mod.writeRegNoWait(1, 0x08, data[i]);
-        await mod.writeRegNoWait(1, 0x10, 0x1b);
-        await mod.writeRegNoWait(1, 0x10, 0x13);
+        if (i % 256 === 0 || i === data.length - 1) {
+          this._ramWriteProgress(title, i, data.length);
+        }
+        await mod.writeReg(1, 0x08, data[i]);
+        await mod.writeReg(1, 0x10, 0x1b);
+        await mod.writeReg(1, 0x10, 0x13);
       }
       await mod.writeReg(1, 0, 0x00);
       await mod.writeReg(1, 0x10, 0x80);
