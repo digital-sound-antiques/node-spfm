@@ -2,10 +2,9 @@ import SPFMMapper from "../spfm-mapper";
 
 export type Command = {
   type: string;
-  port: number;
-  a: number;
+  port: number | null;
+  a: number | null;
   d: number;
-  nowait?: boolean;
 };
 
 export default class CommandBuffer {
@@ -26,14 +25,8 @@ export default class CommandBuffer {
   async flushTo(mapper: SPFMMapper): Promise<number> {
     let count = 0;
     while (this._buf.length > 0) {
-      const cmd = this._buf.shift();
-      if (cmd) {
-        if (cmd.a >= 0) {
-          await mapper.writeReg(cmd.type, cmd.port, cmd.a, cmd.d);
-        } else {
-          await mapper.writeData(cmd.type, cmd.d);
-        }
-      }
+      const cmd = this._buf.shift()!;
+      await mapper.writeReg(cmd.type, cmd.port, cmd.a, cmd.d);
       count++;
     }
     return count;

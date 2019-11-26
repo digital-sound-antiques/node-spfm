@@ -1,6 +1,6 @@
 import microtime from "microtime";
 import SPFMMapper from "../spfm-mapper";
-import { VGM } from "vgm-parser";
+import { VGM, deepCloneChipsObject } from "vgm-parser";
 import AccurateSleeper, { processNodeEventLoop } from "./sleeper";
 import Player from "./player";
 
@@ -93,7 +93,7 @@ export default class VGMPlayer implements Player<VGM> {
 
   async _writeSn76489() {
     const d = this._readByte();
-    return this._mapper.writeData("sn76489", d);
+    return this._mapper.writeReg("sn76489", null, null, d);
   }
 
   async _write(chip: string, port: number = 0) {
@@ -123,13 +123,12 @@ export default class VGMPlayer implements Player<VGM> {
     let start = address;
     let stop = start + data.length - 1;
     const limit = 0xffff;
-    const chip = "ym2608";
     const title = `YM2608 ADPCM (0x${("0000" + start.toString(16)).slice(-5)})`;
 
     start >>= 5;
     stop >>= 5;
 
-    const mod = this._mapper.getModule(chip);
+    const mod = this._mapper.getModule("ym2608");
 
     if (mod) {
       await mod.writeReg(1, 0x10, 0x13); // BRDY EOS Enable

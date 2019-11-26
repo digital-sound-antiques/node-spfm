@@ -57,7 +57,15 @@ export function printConfig() {
         const type = d.modules[i].type.toUpperCase();
         const clock = `${d.modules[i].clock}Hz`;
         const compats = getCompatibleDevices(m.type);
-        const ctext = 0 < compats.length ? "c/w " + compats.map(e => e.toUpperCase()).join(" ") : "";
+        const ctext =
+          compats.length === 0
+            ? ""
+            : "c/w " +
+              compats
+                .map(e => {
+                  return `${e.type.toUpperCase()}`;
+                })
+                .join(" ");
         console.log(`- ${mod} ${type} ${clock} ${chalk.grey(ctext)}`);
       } else {
         console.log(chalk.grey(`- ${mod} ${"EMPTY"}`));

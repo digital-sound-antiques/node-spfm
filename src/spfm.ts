@@ -69,7 +69,7 @@ export default class SPFM {
           try {
             if (res === "LT") {
               this.type = "SPFM_Light";
-              await this.write([0xfe]);
+              await this._write([0xfe]);
             } else if (res === "OK") {
               if (this.type == null) {
                 this.type = "SPFM";
@@ -83,7 +83,7 @@ export default class SPFM {
           }
         });
 
-        await this.write([0xff]);
+        await this._write([0xff]);
       });
     } finally {
       // console.debug(`Type: ${this.type}, Rate: ${this._baudRate}bps`);
@@ -115,9 +115,9 @@ export default class SPFM {
 
   async reset() {
     if (this.type === "SPFM_Light") {
-      await this.write([0xfe]);
+      await this._write([0xfe]);
     } else if (this.type === "SPFM") {
-      await this.write([0xff]);
+      await this._write([0xff]);
     } else {
       // Ignore
     }
@@ -139,7 +139,7 @@ export default class SPFM {
     });
   }
 
-  async write(data: number[]): Promise<boolean> {
+  async _write(data: number[]): Promise<boolean> {
     return new Promise((resolve, reject) => {
       this._port.write(data, err => {
         if (err) {
@@ -151,21 +151,19 @@ export default class SPFM {
     });
   }
 
-  async writeReg(slot: number, port: number, a: number, d: number) {
+  async writeReg(slot: number, port: number | null, a: number | null, d: number) {
     if (this.type === "SPFM_Light") {
-      await this.write([slot & 1, (port & 7) << 1, a, d]);
-    } else if (this.type === "SPFM") {
-      if (this.isHighSpeed) {
-        await this.write([((slot & 7) << 4) | (port & 3), a, d]);
+      if (port != null && a != null) {
+        await this._write([slot & 1, (port & 7) << 1, a, d, 0x80]);
       } else {
-        await this.write([((slot & 7) << 4) | (port & 3), a, d]);
+        await this._write([slot & 1, 0x20, d, 0x80]);
       }
-    }
-  }
-
-  async writeData(slot: number, d: number) {
-    if (this.type === "SPFM_Light") {
-      await this.write([slot & 1, 0x20, d]);
+    } else if (this.type === "SPFM") {
+      if (port != null && a != null) {
+        await this._write([((slot & 7) << 4) | (port & 3), a, d, 0x80]);
+      } else {
+        // Not supported
+      }
     }
   }
 }

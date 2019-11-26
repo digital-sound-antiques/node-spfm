@@ -5,7 +5,7 @@ import SPFMMapperConfig from "./spfm-mapper-config";
 import commandLineArgs, { CommandLineOptions } from "command-line-args";
 
 import zlib from "zlib";
-import SPFMMapper from "./spfm-mapper";
+import SPFMMapper, { ReBirthModule } from "./spfm-mapper";
 import VGMPlayer from "./player/vgm-player";
 import { VGM, formatMinSec } from "vgm-parser";
 import KSSPlayer from "./player/kss-player";
@@ -30,6 +30,12 @@ function getVGMInfoString(file: string, vgm: VGM) {
   const gain = Math.pow(2, vgm.volumeModifier / 32).toFixed(2);
   const loop = vgm.samples.loop ? `YES (${formatMinSec(vgm.samples.loop)})` : "NO";
   const gd3 = vgm.gd3tag;
+  const usedChips = vgm.usedChips.map(chip => {
+    const chipObj = vgm.chips[chip];
+    if (chipObj) {
+      return `${chip.toUpperCase()}(${chipObj.clock}Hz)`;
+    }
+  });
   return `File Name:      ${path.basename(file)}
 
 Track Title:    ${gd3.trackTitle}
@@ -41,8 +47,7 @@ Version:        ${vgm.version.major}.${vgm.version.minor}\tGain: ${gain}\tLoop: 
 VGM by:         ${gd3.vgmBy}
 Notes:          ${gd3.notes}
 
-Used chips:     ${vgm.usedChips.join(", ").toUpperCase()}
-
+Used chips:     ${usedChips.join(", ")}
 
 `;
 }
@@ -61,6 +66,19 @@ function getInfoString(file: string, data: VGM | KSS, song: number = 0) {
     return getVGMInfoString(file, data);
   }
   return getKSSInfoString(file, data, song);
+}
+
+function getModuleTableString(chips: string[], spfms: { [key: string]: ReBirthModule }) {
+  const result = [];
+  for (const chip of chips) {
+    const mod = spfms[chip];
+    if (mod != null) {
+      const name = `${chip.toUpperCase()} => ${mod.type.toUpperCase()}`;
+      const clock = mod.clock != mod.requestedClock ? `(${mod.clock}Hz, clock mismatch)` : `(${mod.clock}Hz)`;
+      result.push(`${name}${clock}`);
+    }
+  }
+  return "Mapped modules: " + result.join("\n                ");
 }
 
 function parseSongNumber(s: string | null) {
@@ -112,7 +130,26 @@ async function play(file: string, options: CommandLineOptions) {
     const data: VGM | KSS = loadFile(file);
     const song = parseSongNumber(options.song);
     stdoutSync((options.banner || "") + getInfoString(file, data, song));
-    await mapper.open();
+
+    let clockMap: { [key: string]: number } = {};
+    if (data instanceof VGM) {
+      const chips: any = data.chips;
+      for (const chip in chips) {
+        if (chips[chip] != null) {
+          clockMap[chip] = chips[chip].clock;
+        }
+      }
+    } else {
+      clockMap = {
+        ay8910: Math.round(3579545 / 2),
+        ym2413: 3579545,
+        y8950: 3579545,
+        k051649: Math.round(3579545 / 2)
+      };
+    }
+    const spfms = await mapper.open(clockMap);
+    stdoutSync(`${getModuleTableString(Object.keys(clockMap), spfms)}\n\n`);
+
     if (data instanceof VGM) {
       player = new VGMPlayer(mapper);
       player.setData(data);
