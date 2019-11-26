@@ -91,8 +91,12 @@ export default class VGMPlayer implements Player<VGM> {
     // do nothing;
   }
 
-  async _writeSn76489() {
+  async _writeSn76489(second: boolean) {
     const d = this._readByte();
+    if (second) {
+      // Not Supported Yet
+      return;
+    }
     return this._mapper.writeReg("sn76489", null, null, d);
   }
 
@@ -120,13 +124,30 @@ export default class VGMPlayer implements Player<VGM> {
     return false;
   }
 
-  async _write(chip: string, port: number = 0) {
+  async _write(chip: string, second: boolean, port: number = 0) {
     const a = this._readByte();
     const d = this._readByte();
+
+    if (second) {
+      // Not Supported Yet
+      return;
+    }
+
     if (chip === "ym2608" && port === 1) {
       if (await this._ym2608ADPCMAddressFix(a, d)) return;
     }
     return this._mapper.writeReg(chip, port, a, d);
+  }
+
+  async _write2(chip: string, port: number = 0) {
+    const a = this._readByte();
+    const d = this._readByte();
+    const second = a & 0x80 ? true : false;
+    if (second) {
+      // Not Supported Yet
+      return;
+    }
+    return this._mapper.writeReg(chip, port, a & 0x7f, d);
   }
 
   _writeYm2612_2a(n: number) {
@@ -208,47 +229,47 @@ export default class VGMPlayer implements Player<VGM> {
       this._waitingFrame += 735;
     } else if (d == 0x63) {
       this._waitingFrame += 882;
-    } else if (d == 0x4f) {
+    } else if (d == 0x4f || d == 0x3f) {
       await this._writeGameGearPsg();
-    } else if (d == 0x50) {
-      await this._writeSn76489();
-    } else if (d == 0x51) {
-      await this._write("ym2413");
-    } else if (d == 0x52) {
-      await this._write("ym2612", 0);
-    } else if (d == 0x53) {
-      await this._write("ym2612", 1);
-    } else if (d == 0x54) {
-      await this._write("ym2151");
-    } else if (d == 0x55) {
-      await this._write("ym2203");
-    } else if (d == 0x56) {
-      await this._write("ym2608", 0);
-    } else if (d == 0x57) {
-      await this._write("ym2608", 1);
-    } else if (d == 0x58) {
-      await this._write("ym2610", 0);
-    } else if (d == 0x59) {
-      await this._write("ym2610", 1);
-    } else if (d == 0x5a) {
-      await this._write("ym3812");
-    } else if (d == 0x5b) {
-      await this._write("ym3526");
-    } else if (d == 0x5c) {
-      await this._write("y8950");
-    } else if (d == 0x5d) {
-      await this._write("ymz280b");
-    } else if (d == 0x5e) {
-      await this._write("ymf262", 0);
-    } else if (d == 0x5f) {
-      await this._write("ymz262", 1);
+    } else if (d == 0x50 || d == 0x30) {
+      await this._writeSn76489(d == 0x30);
+    } else if (d == 0x51 || d == 0xa1) {
+      await this._write("ym2413", d == 0xa1, 0);
+    } else if (d == 0x52 || d == 0xa2) {
+      await this._write("ym2612", d == 0xa2, 0);
+    } else if (d == 0x53 || d == 0xa3) {
+      await this._write("ym2612", d == 0xa3, 1);
+    } else if (d == 0x54 || d == 0xa4) {
+      await this._write("ym2151", d == 0xa4);
+    } else if (d == 0x55 || d == 0xa5) {
+      await this._write("ym2203", d == 0xa5);
+    } else if (d == 0x56 || d == 0xa6) {
+      await this._write("ym2608", d == 0xa6, 0);
+    } else if (d == 0x57 || d == 0xa7) {
+      await this._write("ym2608", d == 0xa7, 1);
+    } else if (d == 0x58 || d == 0xa8) {
+      await this._write("ym2610", d == 0xa8, 0);
+    } else if (d == 0x59 || d == 0xa9) {
+      await this._write("ym2610", d == 0xa9, 1);
+    } else if (d == 0x5a || d == 0xaa) {
+      await this._write("ym3812", d == 0xaa);
+    } else if (d == 0x5b || d == 0xab) {
+      await this._write("ym3526", d == 0xab);
+    } else if (d == 0x5c || d == 0xac) {
+      await this._write("y8950", d == 0xac);
+    } else if (d == 0x5d || d == 0xab) {
+      await this._write("ymz280b", d == 0xab);
+    } else if (d == 0x5e || d == 0xae) {
+      await this._write("ymf262", d == 0xae, 0);
+    } else if (d == 0x5f || d == 0xaf) {
+      await this._write("ymz262", d == 0xaf, 1);
     } else if (d == 0xa0) {
-      await this._write("ay8910");
+      await this._write2("ay8910");
     } else if (d == 0xb4) {
-      await this._write("nesApu");
+      await this._write2("nesApu");
     } else if (d == 0xd2) {
       const port = this._readByte();
-      await this._write("k051649", port);
+      await this._write2("k051649", port);
     } else if (d == 0xe0) {
       await this._seekPcmDataBank();
     } else if (0x70 <= d && d <= 0x7f) {
@@ -262,7 +283,7 @@ export default class VGMPlayer implements Player<VGM> {
         this._eos = true;
       }
     } else {
-      throw new Error("Unknown command: 0x" + d.toString(16));
+      throw new Error("Unsupported command: 0x" + d.toString(16));
     }
   }
 

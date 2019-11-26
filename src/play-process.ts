@@ -33,7 +33,7 @@ function getVGMInfoString(file: string, vgm: VGM) {
   const usedChips = vgm.usedChips.map(chip => {
     const chipObj = vgm.chips[chip];
     if (chipObj) {
-      return `${chip.toUpperCase()}(${chipObj.clock}Hz)`;
+      return `${chipObj.dual ? "2x" : ""}${chip.toUpperCase()}(${chipObj.clock}Hz)`;
     }
   });
   return `File Name:      ${path.basename(file)}
