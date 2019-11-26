@@ -14,7 +14,7 @@ This program works also on Windows 10 with proper console (ex. bash console in V
 
 # Supported File Types
 
-- Video Game Music Files (.vgm, .vgz) 
+- Video Game Music Files (.vgm, .vgz)
 - KSS Files (.kss)                    
 - MGSDRV Files (.mgs)                 
 - MuSICA / Kinrou5 Files (.bgm)       
@@ -30,6 +30,8 @@ This program works also on Windows 10 with proper console (ex. bash console in V
 - YM2413 (OPLL)   
 - YM3526 (OPL)    
 - YM3812 (OPL2)  
+
+Dual chip VGM file is not supported yet.
 
 # Install
 
