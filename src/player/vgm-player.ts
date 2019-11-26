@@ -220,7 +220,7 @@ export default class VGMPlayer implements Player<VGM> {
       await this._write("nesApu");
     } else if (d == 0xd2) {
       const port = this._readByte();
-      await this._write("scc1", port);
+      await this._write("k051649", port);
     } else if (d == 0xe0) {
       await this._seekPcmDataBank();
     } else if (0x70 <= d && d <= 0x7f) {

@@ -27,8 +27,8 @@ function getDefaultClock(chip: string) {
     case "ym3526":
     case "ym2413":
     case "y8950":
-    case "scc1":
-      return 3579545;
+    case "k051649":
+      return 1789773;
     case "ym2203":
     case "ym2151":
       return 4000000;
@@ -174,7 +174,7 @@ export default async function main(argv: string[]) {
     { name: "YM3812 (OPL2)", value: "ym3812" },
     { name: "Y8950 (OPL)", value: "y8950" },
     { name: "YMF262 (OPL3)", value: "ymf262" },
-    { name: "K053260 (SCC)", value: "scc1" },
+    { name: "K051649 (SCC)", value: "k051649" },
     { name: "SN76489 (DPSG)", value: "sn76489" }
   ];
 
