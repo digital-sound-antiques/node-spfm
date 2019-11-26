@@ -9,11 +9,11 @@ import SPFMMapper, { getCompatibleDevices } from "../spfm-mapper";
 const clocks = [
   { name: "1789773Hz", value: 1789773 },
   { name: "3579545Hz", value: 3579545 },
+  { name: "3993600Hz", value: 3993600 },
   { name: "4000000Hz", value: 4000000 },
   { name: "7670454Hz", value: 7670454 },
   { name: "7987200Hz", value: 7987200 },
-  { name: "8000000Hz", value: 8000000 },
-  { name: "Unknown", value: 0 }
+  { name: "8000000Hz", value: 8000000 }
 ];
 
 function getDefaultClockIndex(chip: string) {

@@ -40,7 +40,7 @@ function loadM3UPlayList(file: string) {
   const dirname = path.dirname(file);
   return fs
     .readFileSync(file, { encoding: "utf-8" })
-    .replace(/#.*$/gm, "")
+    .replace(/^#.*$/gm, "")
     .replace(/\r\n/g, "\n")
     .split(/\n/)
     .filter(e => !/^\s*$/.test(e))
