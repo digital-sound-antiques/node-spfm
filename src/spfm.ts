@@ -151,6 +151,14 @@ export default class SPFM {
     });
   }
 
+  async writeNop(n: number) {
+    const d = [];
+    for (let i = 0; i < n; i++) {
+      d.push(0);
+    }
+    return this._write(d);
+  }
+
   async writeReg(slot: number, port: number | null, a: number | null, d: number) {
     if (this.type === "SPFM_Light") {
       if (port != null && a != null) {

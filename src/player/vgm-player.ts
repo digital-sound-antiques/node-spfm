@@ -96,9 +96,36 @@ export default class VGMPlayer implements Player<VGM> {
     return this._mapper.writeReg("sn76489", null, null, d);
   }
 
+  _ym2608_port1_regs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  async _ym2608ADPCMAddressFix(a: number, d: number): Promise<boolean> {
+    const chip = "ym2608";
+    const port = 1;
+    if (a < 0x10) {
+      this._ym2608_port1_regs[a] = d;
+    }
+    if (a === 0x01) {
+      await this._mapper.writeReg(chip, port, a, d & ~2 & 0xff);
+      return true;
+    }
+    if (this._ym2608_port1_regs[0x01] & 0x02) {
+      if ((0x02 <= a && a <= 0x05) || (0x0c <= a && a <= 0x0d)) {
+        const al = a & ~1;
+        const ah = a | 1;
+        const d = ((this._ym2608_port1_regs[ah] << 8) | this._ym2608_port1_regs[al]) << 3;
+        await this._mapper.writeReg(chip, port, al, d & 0xff);
+        await this._mapper.writeReg(chip, port, ah, d >> 8);
+        return true;
+      }
+    }
+    return false;
+  }
+
   async _write(chip: string, port: number = 0) {
     const a = this._readByte();
     const d = this._readByte();
+    if (chip === "ym2608" && port === 1) {
+      if (await this._ym2608ADPCMAddressFix(a, d)) return;
+    }
     return this._mapper.writeReg(chip, port, a, d);
   }
 
@@ -119,14 +146,15 @@ export default class VGMPlayer implements Player<VGM> {
     }
   }
 
-  async _YM2608RamWrite(address: number, data: number[]) {
+  async _YM2608RamWrite(address: number, data: Uint8Array) {
     let start = address;
     let stop = start + data.length - 1;
-    const limit = 0xffff;
+    let limit = Math.min(stop, 0x40000 - 1);
     const title = `YM2608 ADPCM (0x${("0000" + start.toString(16)).slice(-5)})`;
 
-    start >>= 5;
-    stop >>= 5;
+    start >>= 2;
+    stop >>= 2;
+    limit >>= 2;
 
     const mod = this._mapper.getModule("ym2608");
 
@@ -134,7 +162,7 @@ export default class VGMPlayer implements Player<VGM> {
       await mod.writeReg(1, 0x10, 0x13); // BRDY EOS Enable
       await mod.writeReg(1, 0x10, 0x80); // Rest Flags
       await mod.writeReg(1, 0x00, 0x60); // Memory Write
-      await mod.writeReg(1, 0x01, 0x02); // Memory Type
+      await mod.writeReg(1, 0x01, 0x00); // Memory Type
       await mod.writeReg(1, 0x02, start & 0xff);
       await mod.writeReg(1, 0x03, start >> 8);
       await mod.writeReg(1, 0x04, stop & 0xff);
@@ -150,17 +178,17 @@ export default class VGMPlayer implements Player<VGM> {
         await mod.writeReg(1, 0x10, 0x1b);
         await mod.writeReg(1, 0x10, 0x13);
       }
-      await mod.writeReg(1, 0, 0x00);
+      await mod.writeReg(1, 0x00, 0x00);
       await mod.writeReg(1, 0x10, 0x80);
     }
   }
 
   async _processYM2608DeltaPCMData(block: { type: number; size: number }) {
-    let romSize = this._readDword();
+    let ramSize = this._readDword();
     let address = this._readDword();
-    const data = Array<number>();
+    const data = new Uint8Array(block.size - 8);
     for (let i = 0; i < block.size - 8; i++) {
-      data.push(this._readByte());
+      data[i] = this._readByte();
     }
     await this._YM2608RamWrite(address, data);
   }

@@ -80,6 +80,10 @@ export class ReBirthModule {
     this._filters.push(filter);
   }
 
+  async writeNop(n: number) {
+    return this.spfm.writeNop(n);
+  }
+
   async writeReg(port: number | null, a: number | null, d: number) {
     let regDatas: RegisterData[] = [{ port, a, d }];
     for (let filter of this._filters) {
@@ -141,7 +145,6 @@ export default class SPFMMapper {
   }
 
   async open(devicesToOpen: { [key: string]: number }) {
-    const spfms: { [key: string]: SPFM } = {};
     const ports = await SPFM.rawList();
 
     for (const device of this._config.devices) {
