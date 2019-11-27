@@ -82,11 +82,12 @@ function getModuleTableString(chips: string[], spfms: { [key: string]: [SPFMModu
           const name = `${chip.toUpperCase()} => ${mod.deviceId}:${mod.rawType.toUpperCase()}`;
           let clock;
           if (mod.clock != mod.requestedClock) {
-            const div = (mod.rawClock / mod.clock).toFixed(1);
+            const div = mod.rawClock / mod.clock;
+            const divStr = div === 1.0 ? "" : `/${div.toFixed(1)}`;
             if (mod.moduleInfo.clockConverter == null) {
-              clock = `(${formatHz(mod.rawClock)}/${div}, clock mismatch)`;
+              clock = `(${formatHz(mod.rawClock)}${divStr}, clock mismatch)`;
             } else {
-              clock = `(${formatHz(mod.rawClock)}/${div}, software adjusted)`;
+              clock = `(${formatHz(mod.rawClock)}${divStr}, software adjusted)`;
             }
           } else {
             clock = `(${formatHz(mod.clock)})`;

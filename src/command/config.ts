@@ -4,7 +4,13 @@ import commandLineArgs from "command-line-args";
 import commandLineUsage from "command-line-usage";
 import SPFMMapperConfig, { SPFMDeviceConfig } from "../spfm-mapper-config";
 import chalk from "chalk";
-import { getCompatibleDevices, getAvailableDevices, getAvailableModules } from "../spfm-mapper";
+import {
+  getCompatibleDevices,
+  getAvailableDevices,
+  getAvailableModules,
+  getAvailableCompatibleModules,
+  ModuleInfo
+} from "../spfm-mapper";
 
 function formatHz(hz: number): string {
   return `${(hz / 1000000).toFixed(2)}MHz`;
@@ -81,6 +87,21 @@ export function printConfig() {
   console.log("");
 }
 
+function printModules(modules: ModuleInfo[]) {
+  for (const m of modules) {
+    if (m.type === m.rawType) {
+      console.info(`${m.deviceId} SLOT${m.slot}: ${m.type.toUpperCase()} ${formatHz(m.clock)}`);
+    } else {
+      const clock = m.clockConverter ? `${formatHz(m.clock)} + software clock adjustment` : `${formatHz(m.clock)}`;
+      console.info(
+        `${m.deviceId} SLOT${m.slot}: ${m.rawType.toUpperCase()} ${formatHz(
+          m.rawClock
+        )} => ${m.type.toUpperCase()} ${clock}`
+      );
+    }
+  }
+}
+
 export default async function main(argv: string[]) {
   const optionDefinitions = [
     { name: "show", type: Boolean, alias: "s", description: "Show current configuration." },
@@ -154,20 +175,16 @@ export default async function main(argv: string[]) {
 
   if (options.map) {
     const devices = await getAvailableDevices(SPFMMapperConfig.default, true);
-    const modules = getAvailableModules(devices, { useClockConverter: true, useTypeConverter: false });
-    console.info("List of possible module mappring");
-    for (const m of modules) {
-      if (m.type === m.rawType) {
-        console.info(`${m.deviceId} SLOT${m.slot}: ${m.type.toUpperCase()} ${formatHz(m.clock)}`);
-      } else {
-        const clock = m.clockConverter ? `${formatHz(m.clock)} (with software adjustment)` : `${formatHz(m.clock)}`;
-        console.info(
-          `${m.deviceId} SLOT${m.slot}: ${m.rawType.toUpperCase()} ${formatHz(
-            m.rawClock
-          )} => ${m.type.toUpperCase()} ${clock}`
-        );
-      }
-    }
+    const modules = getAvailableModules(devices, { useClockConverter: true });
+    const compatibleModules = getAvailableCompatibleModules(devices, {
+      useClockConverter: true,
+      useTypeConverter: false
+    });
+    console.info("List of possible module mapping\n");
+    printModules(modules);
+    console.info("");
+    printModules(compatibleModules);
+    console.info("");
     return;
   }
 

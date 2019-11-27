@@ -12,7 +12,7 @@ export type RegisterData = {
   d: number;
 };
 
-type ModuleInfo = {
+export type ModuleInfo = {
   deviceId: string;
   rawType: string;
   type: string;
@@ -198,17 +198,16 @@ export function getAvailableModules(
   availableDevices: SPFMDeviceConfig[],
   options: {
     useClockConverter?: boolean;
-    useTypeConverter?: boolean;
   }
 ): ModuleInfo[] {
-  const availableModules: ModuleInfo[] = [];
+  const result: ModuleInfo[] = [];
 
   // enumerate exact modules
   for (const device of availableDevices) {
     for (let i in device.modules) {
       const module = device.modules[i];
       if (module.type != null) {
-        availableModules.push({
+        result.push({
           deviceId: device.id,
           rawType: module.type,
           type: module.type,
@@ -220,15 +219,24 @@ export function getAvailableModules(
       }
     }
   }
+  return result;
+}
 
-  // enumerate compatible modules
+export function getAvailableCompatibleModules(
+  availableDevices: SPFMDeviceConfig[],
+  options: {
+    useClockConverter?: boolean;
+    useTypeConverter?: boolean;
+  }
+): ModuleInfo[] {
+  const result: ModuleInfo[] = [];
   for (const device of availableDevices) {
     for (let i in device.modules) {
       const module = device.modules[i];
       if (module.type != null) {
         const compats = getCompatibleDevices(module.type);
         for (const compat of compats) {
-          availableModules.push({
+          result.push({
             deviceId: device.id,
             rawType: module.type,
             type: compat.type,
@@ -242,7 +250,7 @@ export function getAvailableModules(
     }
   }
 
-  return availableModules;
+  return result;
 }
 
 function findModule(availableModules: ModuleInfo[], type: string, clock: number, fuzzyMatch: boolean = false) {
@@ -269,7 +277,11 @@ export default class SPFMMapper {
 
   async open(modulesToOpen: { type: string; clock: number }[]) {
     const devices = await getAvailableDevices(this._config);
-    let availableModules = getAvailableModules(devices, { useClockConverter: true, useTypeConverter: false });
+    let availableModules = getAvailableModules(devices, { useClockConverter: true });
+    let availableCompatibleModules = getAvailableCompatibleModules(devices, {
+      useClockConverter: true,
+      useTypeConverter: false
+    });
 
     const ports = await SPFM.rawList();
     const spfms: { [key: string]: SPFM } = {};
@@ -277,7 +289,9 @@ export default class SPFMMapper {
     for (const requestedModule of modulesToOpen) {
       const target =
         findModule(availableModules, requestedModule.type, requestedModule.clock) ||
-        findModule(availableModules, requestedModule.type, requestedModule.clock, true);
+        findModule(availableModules, requestedModule.type, requestedModule.clock, true) ||
+        findModule(availableCompatibleModules, requestedModule.type, requestedModule.clock) ||
+        findModule(availableCompatibleModules, requestedModule.type, requestedModule.clock, true);
 
       if (target != null) {
         try {
@@ -297,7 +311,12 @@ export default class SPFMMapper {
           } else {
             this._spfmMap[requestedModule.type].push(mod);
           }
+
+          /* remove target */
           availableModules = availableModules.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
+          availableCompatibleModules = availableCompatibleModules.filter(
+            e => e.deviceId !== target.deviceId || e.slot !== target.slot
+          );
         } catch (e) {
           console.info(e.message);
         }
