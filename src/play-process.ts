@@ -81,7 +81,7 @@ function getModuleTableString(chips: string[], spfms: { [key: string]: [SPFMModu
         if (mod != null) {
           const name = `${chip.toUpperCase()} => ${mod.deviceId}:${mod.rawType.toUpperCase()}`;
           let clock;
-          if (mod.clock != mod.requestedClock) {
+          if (Math.abs(mod.clock - mod.requestedClock) > 2.0) {
             const div = mod.rawClock / mod.clock;
             const divStr = div === 1.0 ? "" : `/${div.toFixed(1)}`;
             if (mod.moduleInfo.clockConverter == null) {
