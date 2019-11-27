@@ -1,140 +1,15 @@
 import SPFM from "./spfm";
 import SPFMMapperConfig, { SPFMModuleConfig, SPFMDeviceConfig } from "./spfm-mapper-config";
+import AY8910ClockFilter from "./filter/ay8910-clock-filter";
+import { RegisterFilterBuilder } from "./filter/register-filter";
+import SPFMModule, { SPFMModuleInfo } from "./spfm-module";
+import { YM2203ClockFilter, YM2608ClockFilter, YM2612ClockFilter } from "./filter/opn-clock-filter";
+import YM2612ToYM2608Filter from "./filter/ym2612-to-ym2608-filter";
 
 export type CompatSpec = {
   type: string;
   clockDiv: number;
 };
-
-export type RegisterData = {
-  port: number | null;
-  a: number | null;
-  d: number;
-};
-
-export type ModuleInfo = {
-  deviceId: string;
-  rawType: string;
-  type: string;
-  slot: number;
-  rawClock: number;
-  clock: number;
-  clockConverter: SPFMRegisterFilterBuilder | null;
-};
-
-export interface SPFMRegisterFilter {
-  filterReg(mod: SPFMModule, data: RegisterData): RegisterData[];
-}
-
-export class AY8910RateFilter implements SPFMRegisterFilter {
-  _ratio: number;
-  _regs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-  constructor(inClock: number, outClock: number) {
-    if (1789770 <= outClock && outClock <= 1789773) {
-      // correct clock for inaccurate VGM header.
-      outClock = 3579545 / 2;
-    }
-    this._ratio = inClock / outClock;
-  }
-
-  filterReg(mod: any, data: RegisterData): RegisterData[] {
-    if (data.a != null && 0 <= data.a && data.a < 16) {
-      this._regs[data.a] = data.d;
-      if (data.a < 6) {
-        // freq
-        const ah = data.a | 1;
-        const al = data.a & 6;
-        const raw = ((this._regs[ah] & 0x0f) << 8) | this._regs[al];
-        const adj = Math.min(0x0fff, Math.round(raw * this._ratio));
-        return [
-          { port: data.port, a: al, d: adj & 0xff },
-          { port: data.port, a: ah, d: adj >> 8 }
-        ];
-      } else if (data.a === 6) {
-        // noise freq
-        const raw = this._regs[6] & 0x1f;
-        const adj = Math.min(0xfff, Math.round(raw * this._ratio));
-        return [{ port: data.port, a: data.a, d: adj }];
-      } else if (data.a == 11 || data.a == 12) {
-        // envelope freq
-        const ah = 12;
-        const al = 11;
-        const raw = (this._regs[ah] << 8) | this._regs[al];
-        const adj = Math.min(0xffff, Math.round(raw * this._ratio));
-        return [
-          { port: data.port, a: al, d: adj & 0xff },
-          { port: data.port, a: ah, d: adj >> 8 }
-        ];
-      }
-    }
-    return [data];
-  }
-}
-
-export class SPFMModule {
-  spfm: SPFM;
-  moduleInfo: ModuleInfo;
-  type: string;
-  slot: number;
-  requestedClock: number;
-  _filters: SPFMRegisterFilter[] = [];
-  constructor(spfm: SPFM, moduleInfo: ModuleInfo, requestedClock: number) {
-    this.spfm = spfm;
-    this.moduleInfo = moduleInfo;
-    this.type = moduleInfo.type;
-    this.slot = moduleInfo.slot;
-    this.requestedClock = requestedClock;
-    if (moduleInfo.clockConverter) {
-      this._filters.push(moduleInfo.clockConverter(moduleInfo, { ...moduleInfo, clock: requestedClock }));
-    }
-  }
-
-  get isCompatible() {
-    return this.type !== this.rawType;
-  }
-
-  get rawType() {
-    return this.moduleInfo.rawType;
-  }
-
-  get rawClock() {
-    return this.moduleInfo.rawClock;
-  }
-
-  get clock() {
-    return this.moduleInfo.clock;
-  }
-
-  get deviceId() {
-    return this.moduleInfo.deviceId;
-  }
-
-  addFilter(filter: SPFMRegisterFilter) {
-    this._filters.push(filter);
-  }
-
-  async writeNop(n: number) {
-    return this.spfm.writeNop(n);
-  }
-
-  async writeReg(port: number | null, a: number | null, d: number) {
-    let regDatas: RegisterData[] = [{ port, a, d }];
-    for (let filter of this._filters) {
-      let res: RegisterData[] = [];
-      for (let data of regDatas) {
-        res = res.concat(filter.filterReg(this, data));
-      }
-      regDatas = res;
-    }
-    for (let data of regDatas) {
-      await this.spfm.writeReg(this.slot, data.port, data.a, data.d);
-    }
-  }
-
-  getDebugString() {
-    return `${this.spfm.path} slot${this.slot}=${this.type}`;
-  }
-}
 
 export function getCompatibleDevices(type: string): CompatSpec[] {
   switch (type) {
@@ -151,7 +26,7 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
       return [{ type: "ay8910", clockDiv: 2 }];
     case "ym2608":
       return [
-        { type: "ym2612", clockDiv: 2 },
+        { type: "ym2612", clockDiv: 1 },
         { type: "ym2203", clockDiv: 2 },
         { type: "ay8910", clockDiv: 4 }
       ];
@@ -159,8 +34,6 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
       return [];
   }
 }
-
-type SPFMRegisterFilterBuilder = (inModule: SPFMModuleConfig, outModule: SPFMModuleConfig) => SPFMRegisterFilter;
 
 function fuzzyClockMatch(a: number, b: number) {
   return b / 1.02 <= a && a <= b * 1.02;
@@ -182,14 +55,25 @@ export async function getAvailableDevices(
   });
 }
 
-export function getTypeConverterBuilder(inType: string, outType: string): SPFMRegisterFilterBuilder | null {
+export function getTypeConverterBuilder(inType: string, outType: string): RegisterFilterBuilder | null {
+  if (inType === "ym2612" && outType === "ym2608") {
+    return () => new YM2612ToYM2608Filter();
+  }
   return null;
 }
 
-export function getClockConverterBuilder(type: string): SPFMRegisterFilterBuilder | null {
+export function getClockConverterBuilder(type: string): RegisterFilterBuilder | null {
   if (type === "ay8910") {
-    return (inModule: SPFMModuleConfig, outModule: SPFMModuleConfig) =>
-      new AY8910RateFilter(inModule.clock, outModule.clock);
+    return (inModule, outModule) => new AY8910ClockFilter(inModule.clock, outModule.clock);
+  }
+  if (type === "ym2203") {
+    return (inModule, outModule) => new YM2203ClockFilter(inModule.clock, outModule.clock);
+  }
+  if (type === "ym2608") {
+    return (inModule, outModule) => new YM2608ClockFilter(inModule.clock, outModule.clock);
+  }
+  if (type === "ym2612") {
+    return (inModule, outModule) => new YM2612ClockFilter(inModule.clock, outModule.clock);
   }
   return null;
 }
@@ -199,8 +83,8 @@ export function getAvailableModules(
   options: {
     useClockConverter?: boolean;
   }
-): ModuleInfo[] {
-  const result: ModuleInfo[] = [];
+): SPFMModuleInfo[] {
+  const result: SPFMModuleInfo[] = [];
 
   // enumerate exact modules
   for (const device of availableDevices) {
@@ -214,7 +98,8 @@ export function getAvailableModules(
           slot: module.slot,
           rawClock: module.clock,
           clock: module.clock,
-          clockConverter: options.useClockConverter ? getClockConverterBuilder(module.type) : null
+          clockConverter: options.useClockConverter ? getClockConverterBuilder(module.type) : null,
+          typeConverter: null
         });
       }
     }
@@ -228,8 +113,8 @@ export function getAvailableCompatibleModules(
     useClockConverter?: boolean;
     useTypeConverter?: boolean;
   }
-): ModuleInfo[] {
-  const result: ModuleInfo[] = [];
+): SPFMModuleInfo[] {
+  const result: SPFMModuleInfo[] = [];
   for (const device of availableDevices) {
     for (let i in device.modules) {
       const module = device.modules[i];
@@ -243,7 +128,8 @@ export function getAvailableCompatibleModules(
             slot: module.slot,
             rawClock: module.clock,
             clock: module.clock / compat.clockDiv,
-            clockConverter: options.useClockConverter ? getClockConverterBuilder(compat.type) : null
+            clockConverter: options.useClockConverter ? getClockConverterBuilder(compat.type) : null,
+            typeConverter: options.useTypeConverter ? getTypeConverterBuilder(compat.type, module.type) : null
           });
         }
       }
@@ -253,7 +139,7 @@ export function getAvailableCompatibleModules(
   return result;
 }
 
-function findModule(availableModules: ModuleInfo[], type: string, clock: number, fuzzyMatch: boolean = false) {
+function findModule(availableModules: SPFMModuleInfo[], type: string, clock: number, fuzzyMatch: boolean = false) {
   return availableModules.find(m => {
     if (m.clockConverter == null) {
       if (fuzzyMatch) {
@@ -262,6 +148,7 @@ function findModule(availableModules: ModuleInfo[], type: string, clock: number,
         if (m.clock !== clock) return false;
       }
     }
+    if (m.typeConverter != null) return true;
     return m.type === type;
   });
 }
@@ -280,7 +167,7 @@ export default class SPFMMapper {
     let availableModules = getAvailableModules(devices, { useClockConverter: true });
     let availableCompatibleModules = getAvailableCompatibleModules(devices, {
       useClockConverter: true,
-      useTypeConverter: false
+      useTypeConverter: true
     });
 
     const ports = await SPFM.rawList();

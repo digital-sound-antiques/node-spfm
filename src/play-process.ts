@@ -5,12 +5,13 @@ import SPFMMapperConfig from "./spfm-mapper-config";
 import commandLineArgs, { CommandLineOptions } from "command-line-args";
 
 import zlib from "zlib";
-import SPFMMapper, { SPFMModule } from "./spfm-mapper";
+import SPFMMapper from "./spfm-mapper";
 import VGMPlayer from "./player/vgm-player";
 import { VGM, formatMinSec } from "vgm-parser";
 import KSSPlayer from "./player/kss-player";
 import { KSS } from "libkss-js";
 import Player from "./player/player";
+import SPFMModule from "./spfm-module";
 
 async function stdoutSync(message: string) {
   return new Promise((resolve, reject) => {

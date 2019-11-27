@@ -255,6 +255,8 @@ export default class VGMPlayer implements Player<VGM> {
       await this._write("ymz262", d == 0xaf ? 1 : 0, 1);
     } else if (d == 0xa0) {
       await this._write2("ay8910");
+    } else if (d == 0xb0) {
+      await this._write2("rf5c68");
     } else if (d == 0xb4) {
       await this._write2("nesApu");
     } else if (d == 0xd2) {

@@ -8,9 +8,9 @@ import {
   getCompatibleDevices,
   getAvailableDevices,
   getAvailableModules,
-  getAvailableCompatibleModules,
-  ModuleInfo
+  getAvailableCompatibleModules
 } from "../spfm-mapper";
+import { SPFMModuleInfo } from "src/spfm-module";
 
 function formatHz(hz: number): string {
   return `${(hz / 1000000).toFixed(2)}MHz`;
@@ -87,7 +87,7 @@ export function printConfig() {
   console.log("");
 }
 
-function printModules(modules: ModuleInfo[]) {
+function printModules(modules: SPFMModuleInfo[]) {
   for (const m of modules) {
     if (m.type === m.rawType) {
       console.info(`${m.deviceId} SLOT${m.slot}: ${m.type.toUpperCase()} ${formatHz(m.clock)}`);
