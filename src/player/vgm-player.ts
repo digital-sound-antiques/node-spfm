@@ -244,8 +244,8 @@ export default class VGMPlayer implements Player<VGM> {
       await this._write("ym3526", d == 0xab ? 1 : 0);
     } else if (d == 0x5c || d == 0xac) {
       await this._write("y8950", d == 0xac ? 1 : 0);
-    } else if (d == 0x5d || d == 0xab) {
-      await this._write("ymz280b", d == 0xab ? 1 : 0);
+    } else if (d == 0x5d || d == 0xad) {
+      await this._write("ymz280b", d == 0xad ? 1 : 0);
     } else if (d == 0x5e || d == 0xae) {
       await this._write("ymf262", d == 0xae ? 1 : 0, 0);
     } else if (d == 0x5f || d == 0xaf) {
