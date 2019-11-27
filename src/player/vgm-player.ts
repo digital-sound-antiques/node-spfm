@@ -216,6 +216,9 @@ export default class VGMPlayer implements Player<VGM> {
       this._waitingFrame += 735;
     } else if (d == 0x63) {
       this._waitingFrame += 882;
+    } else if (d == 0x31) {
+      /* skip: ay8910 stereo mask */
+      this._readByte();
     } else if (d == 0x4f || d == 0x3f) {
       await this._writeGameGearPsg();
     } else if (d == 0x50 || d == 0x30) {
