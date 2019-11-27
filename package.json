@@ -1,6 +1,6 @@
 {
   "name": "node-spfm",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "main": "index.js",
   "author": "Mitsutaka Okazaki",
   "license": "MIT",
@@ -49,6 +49,7 @@
     "type": "git",
     "url": "git://github.com/digital-sound-antiques/node-spfm.git"
   },
+  "keywords": ["spfm", "vgm", "chiptune"],
   "engines": {
     "node": ">=10.0.0"
   }

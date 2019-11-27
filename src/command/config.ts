@@ -4,16 +4,22 @@ import commandLineArgs from "command-line-args";
 import commandLineUsage from "command-line-usage";
 import SPFMMapperConfig, { SPFMDeviceConfig } from "../spfm-mapper-config";
 import chalk from "chalk";
-import SPFMMapper, { getCompatibleDevices } from "../spfm-mapper";
+import { getCompatibleDevices, getAvailableDevices, getAvailableModules } from "../spfm-mapper";
+
+function formatHz(hz: number): string {
+  return `${(hz / 1000000).toFixed(2)}MHz`;
+}
 
 const clocks = [
-  { name: "1789773Hz", value: 1789773 },
-  { name: "3579545Hz", value: 3579545 },
-  { name: "3993600Hz", value: 3993600 },
-  { name: "4000000Hz", value: 4000000 },
-  { name: "7670454Hz", value: 7670454 },
-  { name: "7987200Hz", value: 7987200 },
-  { name: "8000000Hz", value: 8000000 }
+  { name: formatHz(1789773), value: 1789773 },
+  { name: formatHz(3579545), value: 3579545 },
+  { name: formatHz(3993600), value: 3993600 },
+  { name: formatHz(4000000), value: 4000000 },
+  { name: formatHz(7670454), value: 7670454 },
+  { name: formatHz(7987200), value: 7987200 },
+  { name: formatHz(8000000), value: 8000000 },
+  { name: formatHz(14318180), value: 14318180 },
+  { name: formatHz(33868800), value: 33868800 }
 ];
 
 function getDefaultClockIndex(chip: string) {
@@ -55,7 +61,7 @@ export function printConfig() {
       const mod = `SLOT${i}:`;
       if (m.type) {
         const type = d.modules[i].type.toUpperCase();
-        const clock = `${d.modules[i].clock}Hz`;
+        const clock = `${formatHz(d.modules[i].clock)}`;
         const compats = getCompatibleDevices(m.type);
         const ctext =
           compats.length === 0
@@ -78,6 +84,12 @@ export function printConfig() {
 export default async function main(argv: string[]) {
   const optionDefinitions = [
     { name: "show", type: Boolean, alias: "s", description: "Show current configuration." },
+    {
+      name: "map",
+      type: Boolean,
+      alias: "m",
+      description: "List of available module mapping on current configuration."
+    },
     { name: "clear", type: Boolean, alias: "c", description: "Clear all configuration data." },
     { name: "help", type: Boolean, alias: "h", description: "Show this help." }
   ];
@@ -118,6 +130,7 @@ export default async function main(argv: string[]) {
     }
   ];
   const options = commandLineArgs(optionDefinitions, { argv });
+
   if (options.help) {
     console.info(commandLineUsage(sections));
     return;
@@ -135,6 +148,25 @@ export default async function main(argv: string[]) {
     if (answer.confirm) {
       SPFMMapperConfig.default.clear();
       console.info("Done.");
+    }
+    return;
+  }
+
+  if (options.map) {
+    const devices = await getAvailableDevices(SPFMMapperConfig.default, true);
+    const modules = getAvailableModules(devices, { useClockConverter: true, useTypeConverter: false });
+    console.info("List of possible module mappring");
+    for (const m of modules) {
+      if (m.type === m.rawType) {
+        console.info(`${m.deviceId} SLOT${m.slot}: ${m.type.toUpperCase()} ${formatHz(m.clock)}`);
+      } else {
+        const clock = m.clockConverter ? `${formatHz(m.clock)} (with software adjustment)` : `${formatHz(m.clock)}`;
+        console.info(
+          `${m.deviceId} SLOT${m.slot}: ${m.rawType.toUpperCase()} ${formatHz(
+            m.rawClock
+          )} => ${m.type.toUpperCase()} ${clock}`
+        );
+      }
     }
     return;
   }

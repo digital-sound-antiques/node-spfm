@@ -1,4 +1,3 @@
-import microtime from "microtime";
 import SPFMMapper from "../spfm-mapper";
 import { KSS, KSSPlay } from "libkss-js";
 import Player from "./player";
@@ -94,11 +93,11 @@ export default class KSSPlayer implements Player<KSS> {
   }
 
   _writeSn76489(d: number) {
-    this._buffer.push({ type: "sn76489", port: -1, a: -1, d });
+    this._buffer.push({ type: "sn76489", index: 0, port: -1, a: -1, d });
   }
 
   _write(type: string, port: number, a: number, d: number) {
-    this._buffer.push({ type, port, a, d });
+    this._buffer.push({ type, index: 0, port, a, d });
   }
 
   async play() {

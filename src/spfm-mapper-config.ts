@@ -3,7 +3,7 @@ import path from "path";
 
 export const Version = "0.2.0";
 
-export type ReBirthModuleConfig = {
+export type SPFMModuleConfig = {
   type: string;
   slot: number;
   clock: number;
@@ -11,7 +11,7 @@ export type ReBirthModuleConfig = {
 
 export type SPFMDeviceConfig = {
   id: string /* serialNumber */;
-  modules: ReBirthModuleConfig[];
+  modules: SPFMModuleConfig[];
 };
 
 export type SPFMMapperConfigObject = {

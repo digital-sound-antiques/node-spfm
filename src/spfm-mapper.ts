@@ -1,5 +1,5 @@
 import SPFM from "./spfm";
-import SPFMMapperConfig from "./spfm-mapper-config";
+import SPFMMapperConfig, { SPFMModuleConfig, SPFMDeviceConfig } from "./spfm-mapper-config";
 
 export type CompatSpec = {
   type: string;
@@ -12,8 +12,18 @@ export type RegisterData = {
   d: number;
 };
 
+type ModuleInfo = {
+  deviceId: string;
+  rawType: string;
+  type: string;
+  slot: number;
+  rawClock: number;
+  clock: number;
+  clockConverter: SPFMRegisterFilterBuilder | null;
+};
+
 export interface SPFMRegisterFilter {
-  filterReg(mod: ReBirthModule, data: RegisterData): RegisterData[];
+  filterReg(mod: SPFMModule, data: RegisterData): RegisterData[];
 }
 
 export class AY8910RateFilter implements SPFMRegisterFilter {
@@ -61,19 +71,42 @@ export class AY8910RateFilter implements SPFMRegisterFilter {
   }
 }
 
-export class ReBirthModule {
+export class SPFMModule {
   spfm: SPFM;
+  moduleInfo: ModuleInfo;
   type: string;
   slot: number;
-  clock: number;
   requestedClock: number;
   _filters: SPFMRegisterFilter[] = [];
-  constructor(spfm: SPFM, slot: number, type: string, clock: number, requestedClock: number) {
+  constructor(spfm: SPFM, moduleInfo: ModuleInfo, requestedClock: number) {
     this.spfm = spfm;
-    this.type = type;
-    this.slot = slot;
-    this.clock = clock;
+    this.moduleInfo = moduleInfo;
+    this.type = moduleInfo.type;
+    this.slot = moduleInfo.slot;
     this.requestedClock = requestedClock;
+    if (moduleInfo.clockConverter) {
+      this._filters.push(moduleInfo.clockConverter(moduleInfo, { ...moduleInfo, clock: requestedClock }));
+    }
+  }
+
+  get isCompatible() {
+    return this.type !== this.rawType;
+  }
+
+  get rawType() {
+    return this.moduleInfo.rawType;
+  }
+
+  get rawClock() {
+    return this.moduleInfo.rawClock;
+  }
+
+  get clock() {
+    return this.moduleInfo.clock;
+  }
+
+  get deviceId() {
+    return this.moduleInfo.deviceId;
   }
 
   addFilter(filter: SPFMRegisterFilter) {
@@ -99,7 +132,7 @@ export class ReBirthModule {
   }
 
   getDebugString() {
-    return `${this.spfm._path} slot${this.slot}=${this.type}`;
+    return `${this.spfm.path} slot${this.slot}=${this.type}`;
   }
 }
 
@@ -127,87 +160,164 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
   }
 }
 
-export function createCompatibleModule(mod: ReBirthModule, compat: CompatSpec): ReBirthModule {
-  if (compat.type === "ay8910") {
-    const filter = new AY8910RateFilter(mod.clock / compat.clockDiv, mod.requestedClock / compat.clockDiv);
-    mod.addFilter(filter);
+type SPFMRegisterFilterBuilder = (inModule: SPFMModuleConfig, outModule: SPFMModuleConfig) => SPFMRegisterFilter;
+
+function fuzzyClockMatch(a: number, b: number) {
+  return b / 1.02 <= a && a <= b * 1.02;
+}
+
+export async function getAvailableDevices(
+  config: SPFMMapperConfig,
+  includeOffline: boolean = false
+): Promise<SPFMDeviceConfig[]> {
+  if (includeOffline) {
+    return config.devices.slice(0);
   }
-  return mod;
+  const ports = await SPFM.rawList();
+  return config.devices.filter(d => {
+    if (ports.find(p => p.serialNumber === d.id) != null) {
+      return true;
+    }
+    return false;
+  });
+}
+
+export function getTypeConverterBuilder(inType: string, outType: string): SPFMRegisterFilterBuilder | null {
+  return null;
+}
+
+export function getClockConverterBuilder(type: string): SPFMRegisterFilterBuilder | null {
+  if (type === "ay8910") {
+    return (inModule: SPFMModuleConfig, outModule: SPFMModuleConfig) =>
+      new AY8910RateFilter(inModule.clock, outModule.clock);
+  }
+  return null;
+}
+
+export function getAvailableModules(
+  availableDevices: SPFMDeviceConfig[],
+  options: {
+    useClockConverter?: boolean;
+    useTypeConverter?: boolean;
+  }
+): ModuleInfo[] {
+  const availableModules: ModuleInfo[] = [];
+
+  // enumerate exact modules
+  for (const device of availableDevices) {
+    for (let i in device.modules) {
+      const module = device.modules[i];
+      if (module.type != null) {
+        availableModules.push({
+          deviceId: device.id,
+          rawType: module.type,
+          type: module.type,
+          slot: module.slot,
+          rawClock: module.clock,
+          clock: module.clock,
+          clockConverter: options.useClockConverter ? getClockConverterBuilder(module.type) : null
+        });
+      }
+    }
+  }
+
+  // enumerate compatible modules
+  for (const device of availableDevices) {
+    for (let i in device.modules) {
+      const module = device.modules[i];
+      if (module.type != null) {
+        const compats = getCompatibleDevices(module.type);
+        for (const compat of compats) {
+          availableModules.push({
+            deviceId: device.id,
+            rawType: module.type,
+            type: compat.type,
+            slot: module.slot,
+            rawClock: module.clock,
+            clock: module.clock / compat.clockDiv,
+            clockConverter: options.useClockConverter ? getClockConverterBuilder(compat.type) : null
+          });
+        }
+      }
+    }
+  }
+
+  return availableModules;
+}
+
+function findModule(availableModules: ModuleInfo[], type: string, clock: number, fuzzyMatch: boolean = false) {
+  return availableModules.find(m => {
+    if (m.clockConverter == null) {
+      if (fuzzyMatch) {
+        if (!fuzzyClockMatch(m.clock, clock)) return false;
+      } else {
+        if (m.clock !== clock) return false;
+      }
+    }
+    return m.type === type;
+  });
 }
 
 export default class SPFMMapper {
   _config: SPFMMapperConfig;
   _spfms: SPFM[] = [];
-  _spfmMap: { [key: string]: ReBirthModule } = {};
+  _spfmMap: { [key: string]: [SPFMModule] } = {};
 
   constructor(config: SPFMMapperConfig) {
     this._config = config;
   }
 
-  async open(devicesToOpen: { [key: string]: number }) {
+  async open(modulesToOpen: { type: string; clock: number }[]) {
+    const devices = await getAvailableDevices(this._config);
+    let availableModules = getAvailableModules(devices, { useClockConverter: true, useTypeConverter: false });
+
     const ports = await SPFM.rawList();
+    const spfms: { [key: string]: SPFM } = {};
 
-    for (const device of this._config.devices) {
-      const { id, modules } = device;
-      try {
-        const port = ports.find(e => e.serialNumber === id);
-        if (port == null) {
-          throw new Error("Can't find the device ${id}.");
-        }
-        const spfm = new SPFM(port.path);
-        await spfm.open();
-        this._spfms.push(spfm);
+    for (const requestedModule of modulesToOpen) {
+      const target =
+        findModule(availableModules, requestedModule.type, requestedModule.clock) ||
+        findModule(availableModules, requestedModule.type, requestedModule.clock, true);
 
-        for (const module of modules) {
-          if (module.type) {
-            const { slot, type, clock } = module;
-
-            /* prepare primary module */
-            const requestedClock = devicesToOpen[type];
-            if (requestedClock != null) {
-              const newMod = new ReBirthModule(spfm, slot, type, clock, requestedClock);
-              const oldMod = this._spfmMap[module.type];
-              if (oldMod) {
-                /* if the same module is installed, nearest clock module will be  used. */
-                if (Math.abs(oldMod.clock - requestedClock) > Math.abs(newMod.clock - requestedClock)) {
-                  this._spfmMap[module.type] = newMod;
-                }
-              } else {
-                this._spfmMap[module.type] = newMod;
-              }
-            }
-
-            /* prepare compatible module */
-            const compats = getCompatibleDevices(type);
-            for (const compat of compats) {
-              if (this._spfmMap[compat.type] == null) {
-                const requestedClock = devicesToOpen[compat.type];
-                if (requestedClock != null) {
-                  const mod = createCompatibleModule(
-                    new ReBirthModule(spfm, slot, type, clock, requestedClock * compat.clockDiv),
-                    compat
-                  );
-                  if (mod != null) {
-                    this._spfmMap[compat.type] = mod;
-                  }
-                }
-              }
-            }
+      if (target != null) {
+        try {
+          const port = ports.find(e => e.serialNumber === target.deviceId);
+          if (port == null) {
+            throw new Error("Can't find the device ${id}.");
           }
+          let spfm = spfms[port.path];
+          if (spfm == null) {
+            spfm = new SPFM(port.path);
+            await spfm.open();
+            spfms[port.path] = spfm;
+          }
+          const mod = new SPFMModule(spfm, target, requestedModule.clock);
+          if (this._spfmMap[requestedModule.type] == null) {
+            this._spfmMap[requestedModule.type] = [mod];
+          } else {
+            this._spfmMap[requestedModule.type].push(mod);
+          }
+          availableModules = availableModules.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
+        } catch (e) {
+          console.info(e.message);
         }
-      } catch (e) {
-        console.info(e.message);
       }
     }
+
+    this._spfms = Object.values(spfms);
     return this._spfmMap;
   }
 
-  getModule(type: string) {
-    return this._spfmMap[type];
+  getModule(type: string, index: number): SPFMModule | null {
+    const spfms = this._spfmMap[type];
+    if (spfms != null) {
+      return spfms[index];
+    }
+    return null;
   }
 
-  async writeReg(type: string, port: number | null, a: number | null, d: number) {
-    const mod = this.getModule(type);
+  async writeReg(type: string, index: number, port: number | null, a: number | null, d: number) {
+    const mod = this.getModule(type, index);
     if (mod) {
       await mod.writeReg(port, a, d);
     }

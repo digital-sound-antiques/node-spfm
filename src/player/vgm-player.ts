@@ -1,6 +1,6 @@
 import microtime from "microtime";
 import SPFMMapper from "../spfm-mapper";
-import { VGM, deepCloneChipsObject } from "vgm-parser";
+import { VGM } from "vgm-parser";
 import AccurateSleeper, { processNodeEventLoop } from "./sleeper";
 import Player from "./player";
 
@@ -91,24 +91,20 @@ export default class VGMPlayer implements Player<VGM> {
     // do nothing;
   }
 
-  async _writeSn76489(second: boolean) {
+  async _writeSn76489(index: number) {
     const d = this._readByte();
-    if (second) {
-      // Not Supported Yet
-      return;
-    }
-    return this._mapper.writeReg("sn76489", null, null, d);
+    return this._mapper.writeReg("sn76489", index, null, null, d);
   }
 
   _ym2608_port1_regs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-  async _ym2608ADPCMAddressFix(a: number, d: number): Promise<boolean> {
+  async _ym2608ADPCMAddressFix(index: number, a: number, d: number): Promise<boolean> {
     const chip = "ym2608";
     const port = 1;
     if (a < 0x10) {
       this._ym2608_port1_regs[a] = d;
     }
     if (a === 0x01) {
-      await this._mapper.writeReg(chip, port, a, d & ~2 & 0xff);
+      await this._mapper.writeReg(chip, index, port, a, d & ~2 & 0xff);
       return true;
     }
     if (this._ym2608_port1_regs[0x01] & 0x02) {
@@ -116,38 +112,29 @@ export default class VGMPlayer implements Player<VGM> {
         const al = a & ~1;
         const ah = a | 1;
         const d = ((this._ym2608_port1_regs[ah] << 8) | this._ym2608_port1_regs[al]) << 3;
-        await this._mapper.writeReg(chip, port, al, d & 0xff);
-        await this._mapper.writeReg(chip, port, ah, d >> 8);
+        await this._mapper.writeReg(chip, index, port, al, d & 0xff);
+        await this._mapper.writeReg(chip, index, port, ah, d >> 8);
         return true;
       }
     }
     return false;
   }
 
-  async _write(chip: string, second: boolean, port: number = 0) {
+  async _write(chip: string, index: number, port: number = 0) {
     const a = this._readByte();
     const d = this._readByte();
 
-    if (second) {
-      // Not Supported Yet
-      return;
-    }
-
     if (chip === "ym2608" && port === 1) {
-      if (await this._ym2608ADPCMAddressFix(a, d)) return;
+      if (await this._ym2608ADPCMAddressFix(index, a, d)) return;
     }
-    return this._mapper.writeReg(chip, port, a, d);
+    return this._mapper.writeReg(chip, index, port, a, d);
   }
 
   async _write2(chip: string, port: number = 0) {
     const a = this._readByte();
     const d = this._readByte();
-    const second = a & 0x80 ? true : false;
-    if (second) {
-      // Not Supported Yet
-      return;
-    }
-    return this._mapper.writeReg(chip, port, a & 0x7f, d);
+    const index = a & 0x80 ? 1 : 0;
+    return this._mapper.writeReg(chip, index, port, a & 0x7f, d);
   }
 
   _writeYm2612_2a(n: number) {
@@ -167,7 +154,7 @@ export default class VGMPlayer implements Player<VGM> {
     }
   }
 
-  async _YM2608RamWrite(address: number, data: Uint8Array) {
+  async _YM2608RamWrite(index: number, address: number, data: Uint8Array) {
     let start = address;
     let stop = start + data.length - 1;
     let limit = Math.min(stop, 0x40000 - 1);
@@ -177,7 +164,7 @@ export default class VGMPlayer implements Player<VGM> {
     stop >>= 2;
     limit >>= 2;
 
-    const mod = this._mapper.getModule("ym2608");
+    const mod = this._mapper.getModule("ym2608", index);
 
     if (mod) {
       await mod.writeReg(1, 0x10, 0x13); // BRDY EOS Enable
@@ -204,14 +191,14 @@ export default class VGMPlayer implements Player<VGM> {
     }
   }
 
-  async _processYM2608DeltaPCMData(block: { type: number; size: number }) {
+  async _processYM2608DeltaPCMData(index: number, block: { type: number; size: number }) {
     let ramSize = this._readDword();
     let address = this._readDword();
     const data = new Uint8Array(block.size - 8);
     for (let i = 0; i < block.size - 8; i++) {
       data[i] = this._readByte();
     }
-    await this._YM2608RamWrite(address, data);
+    await this._YM2608RamWrite(index, address, data);
   }
 
   async _playLoop() {
@@ -219,7 +206,7 @@ export default class VGMPlayer implements Player<VGM> {
     if (d == 0x67) {
       var block = this._processDataBlock();
       if (block.type == 0x81) {
-        await this._processYM2608DeltaPCMData(block);
+        await this._processYM2608DeltaPCMData(0, block);
       } else {
         this._index += block.size;
       }
@@ -232,37 +219,37 @@ export default class VGMPlayer implements Player<VGM> {
     } else if (d == 0x4f || d == 0x3f) {
       await this._writeGameGearPsg();
     } else if (d == 0x50 || d == 0x30) {
-      await this._writeSn76489(d == 0x30);
+      await this._writeSn76489(d == 0x30 ? 1 : 0);
     } else if (d == 0x51 || d == 0xa1) {
-      await this._write("ym2413", d == 0xa1, 0);
+      await this._write("ym2413", d == 0xa1 ? 1 : 0, 0);
     } else if (d == 0x52 || d == 0xa2) {
-      await this._write("ym2612", d == 0xa2, 0);
+      await this._write("ym2612", d == 0xa2 ? 1 : 0, 0);
     } else if (d == 0x53 || d == 0xa3) {
-      await this._write("ym2612", d == 0xa3, 1);
+      await this._write("ym2612", d == 0xa3 ? 1 : 0, 1);
     } else if (d == 0x54 || d == 0xa4) {
-      await this._write("ym2151", d == 0xa4);
+      await this._write("ym2151", d == 0xa4 ? 1 : 0);
     } else if (d == 0x55 || d == 0xa5) {
-      await this._write("ym2203", d == 0xa5);
+      await this._write("ym2203", d == 0xa5 ? 1 : 0);
     } else if (d == 0x56 || d == 0xa6) {
-      await this._write("ym2608", d == 0xa6, 0);
+      await this._write("ym2608", d == 0xa6 ? 1 : 0, 0);
     } else if (d == 0x57 || d == 0xa7) {
-      await this._write("ym2608", d == 0xa7, 1);
+      await this._write("ym2608", d == 0xa7 ? 1 : 0, 1);
     } else if (d == 0x58 || d == 0xa8) {
-      await this._write("ym2610", d == 0xa8, 0);
+      await this._write("ym2610", d == 0xa8 ? 1 : 0, 0);
     } else if (d == 0x59 || d == 0xa9) {
-      await this._write("ym2610", d == 0xa9, 1);
+      await this._write("ym2610", d == 0xa9 ? 1 : 0, 1);
     } else if (d == 0x5a || d == 0xaa) {
-      await this._write("ym3812", d == 0xaa);
+      await this._write("ym3812", d == 0xaa ? 1 : 0);
     } else if (d == 0x5b || d == 0xab) {
-      await this._write("ym3526", d == 0xab);
+      await this._write("ym3526", d == 0xab ? 1 : 0);
     } else if (d == 0x5c || d == 0xac) {
-      await this._write("y8950", d == 0xac);
+      await this._write("y8950", d == 0xac ? 1 : 0);
     } else if (d == 0x5d || d == 0xab) {
-      await this._write("ymz280b", d == 0xab);
+      await this._write("ymz280b", d == 0xab ? 1 : 0);
     } else if (d == 0x5e || d == 0xae) {
-      await this._write("ymf262", d == 0xae, 0);
+      await this._write("ymf262", d == 0xae ? 1 : 0, 0);
     } else if (d == 0x5f || d == 0xaf) {
-      await this._write("ymz262", d == 0xaf, 1);
+      await this._write("ymz262", d == 0xaf ? 1 : 0, 1);
     } else if (d == 0xa0) {
       await this._write2("ay8910");
     } else if (d == 0xb4) {

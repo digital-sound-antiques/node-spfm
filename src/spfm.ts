@@ -7,17 +7,17 @@ export type SPFMPortInfo = SerialPort.PortInfo & {
 };
 
 export default class SPFM {
-  _path: string;
-  _baudRate: number;
+  path: string;
+  baudRate: number;
   _port: SerialPort;
 
   type: SPFMType = null;
 
   constructor(path: string, baudRate: number = 1500000) {
-    this._path = path;
-    this._baudRate = baudRate;
+    this.path = path;
+    this.baudRate = baudRate;
     this._port = new SerialPort(path, {
-      baudRate: this._baudRate,
+      baudRate: this.baudRate,
       dataBits: 8,
       parity: "none",
       stopBits: 1,
@@ -52,7 +52,7 @@ export default class SPFM {
   }
 
   get isHighSpeed() {
-    return this._baudRate === 1500000;
+    return this.baudRate === 1500000;
   }
 
   async _identify() {

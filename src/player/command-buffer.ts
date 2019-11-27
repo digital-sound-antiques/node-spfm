@@ -2,6 +2,7 @@ import SPFMMapper from "../spfm-mapper";
 
 export type Command = {
   type: string;
+  index: number;
   port: number | null;
   a: number | null;
   d: number;
@@ -26,7 +27,7 @@ export default class CommandBuffer {
     let count = 0;
     while (this._buf.length > 0) {
       const cmd = this._buf.shift()!;
-      await mapper.writeReg(cmd.type, cmd.port, cmd.a, cmd.d);
+      await mapper.writeReg(cmd.type, cmd.index, cmd.port, cmd.a, cmd.d);
       count++;
     }
     return count;

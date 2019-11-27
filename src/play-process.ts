@@ -5,7 +5,7 @@ import SPFMMapperConfig from "./spfm-mapper-config";
 import commandLineArgs, { CommandLineOptions } from "command-line-args";
 
 import zlib from "zlib";
-import SPFMMapper, { ReBirthModule } from "./spfm-mapper";
+import SPFMMapper, { SPFMModule } from "./spfm-mapper";
 import VGMPlayer from "./player/vgm-player";
 import { VGM, formatMinSec } from "vgm-parser";
 import KSSPlayer from "./player/kss-player";
@@ -22,6 +22,10 @@ async function stdoutSync(message: string) {
 
 const mapper = new SPFMMapper(SPFMMapperConfig.default);
 
+function formatHz(hz: number): string {
+  return `${(hz / 1000000).toFixed(2)}MHz`;
+}
+
 function toArrayBuffer(b: Buffer) {
   return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
 }
@@ -33,7 +37,7 @@ function getVGMInfoString(file: string, vgm: VGM) {
   const usedChips = vgm.usedChips.map(chip => {
     const chipObj = vgm.chips[chip];
     if (chipObj) {
-      return `${chipObj.dual ? "2x" : ""}${chip.toUpperCase()}(${chipObj.clock}Hz)`;
+      return `${chipObj.dual ? "2x" : ""}${chip.toUpperCase()}(${formatHz(chipObj.clock)})`;
     }
   });
   return `File Name:      ${path.basename(file)}
@@ -68,14 +72,28 @@ function getInfoString(file: string, data: VGM | KSS, song: number = 0) {
   return getKSSInfoString(file, data, song);
 }
 
-function getModuleTableString(chips: string[], spfms: { [key: string]: ReBirthModule }) {
+function getModuleTableString(chips: string[], spfms: { [key: string]: [SPFMModule] }) {
   const result = [];
   for (const chip of chips) {
-    const mod = spfms[chip];
-    if (mod != null) {
-      const name = `${chip.toUpperCase()} => ${mod.type.toUpperCase()}`;
-      const clock = mod.clock != mod.requestedClock ? `(${mod.clock}Hz, clock mismatch)` : `(${mod.clock}Hz)`;
-      result.push(`${name}${clock}`);
+    const spfm = spfms[chip];
+    if (spfm) {
+      for (const mod of spfm) {
+        if (mod != null) {
+          const name = `${chip.toUpperCase()} => ${mod.deviceId}:${mod.rawType.toUpperCase()}`;
+          let clock;
+          if (mod.clock != mod.requestedClock) {
+            const div = (mod.rawClock / mod.clock).toFixed(1);
+            if (mod.moduleInfo.clockConverter == null) {
+              clock = `(${formatHz(mod.rawClock)}/${div}, clock mismatch)`;
+            } else {
+              clock = `(${formatHz(mod.rawClock)}/${div}, software adjusted)`;
+            }
+          } else {
+            clock = `(${formatHz(mod.clock)})`;
+          }
+          result.push(`${name}${clock}`);
+        }
+      }
     }
   }
   return "Mapped modules: " + result.join("\n                ");
@@ -131,24 +149,32 @@ async function play(file: string, options: CommandLineOptions) {
     const song = parseSongNumber(options.song);
     stdoutSync((options.banner || "") + getInfoString(file, data, song));
 
-    let clockMap: { [key: string]: number } = {};
+    let modules: { type: string; clock: number }[] = [];
     if (data instanceof VGM) {
       const chips: any = data.chips;
       for (const chip in chips) {
         if (chips[chip] != null) {
-          clockMap[chip] = chips[chip].clock;
+          modules.push({ type: chip, clock: chips[chip].clock });
+          if (chips[chip].dual) {
+            modules.push({ type: chip, clock: chips[chip].clock });
+          }
         }
       }
     } else {
-      clockMap = {
-        ay8910: Math.round(3579545 / 2),
-        ym2413: 3579545,
-        y8950: 3579545,
-        k051649: Math.round(3579545 / 2)
-      };
+      modules = [
+        { type: "ay8910", clock: Math.round(3579545 / 2) },
+        { type: "ym2413", clock: 3579545 },
+        { type: "y8950", clock: 3579545 },
+        { type: "k051649", clock: Math.round(3579545 / 2) }
+      ];
     }
-    const spfms = await mapper.open(clockMap);
-    stdoutSync(`${getModuleTableString(Object.keys(clockMap), spfms)}\n\n`);
+    const spfms = await mapper.open(modules);
+    if (Object.keys(spfms).length == 0) {
+      stdoutSync("Can't assign any modules. Use `spfm config -m` to see a recognizable chip types.");
+      process.exit(0);
+    }
+    const types = modules.map(e => e.type).filter((elem, index, self) => self.indexOf(elem) === index);
+    stdoutSync(`${getModuleTableString(types, spfms)}\n\n`);
 
     if (data instanceof VGM) {
       player = new VGMPlayer(mapper);
