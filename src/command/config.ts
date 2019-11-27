@@ -39,8 +39,7 @@ function getDefaultClock(chip: string) {
     case "ym3526":
     case "ym2413":
     case "y8950":
-    case "k051649":
-      return 1789773;
+      return 3579545;
     case "ym2203":
     case "ym2151":
       return 4000000;
@@ -48,6 +47,7 @@ function getDefaultClock(chip: string) {
       return 7670454;
     case "ym2608":
       return 8000000;
+    case "k051649":
     case "ay8910":
       return 1789773;
     case "ymf262":
