@@ -31,8 +31,6 @@ This program works also on Windows 10 with proper console (ex. bash console in V
 - YM3526 (OPL)    
 - YM3812 (OPL2)  
 
-Dual chip VGM file is not supported yet.
-
 # Install
 
 Node.js 10 or later is required.
