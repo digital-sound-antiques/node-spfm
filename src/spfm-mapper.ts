@@ -1,9 +1,10 @@
 import SPFM from "./spfm";
-import SPFMMapperConfig, { SPFMModuleConfig, SPFMDeviceConfig } from "./spfm-mapper-config";
+import SPFMMapperConfig, { SPFMDeviceConfig } from "./spfm-mapper-config";
 import AY8910ClockFilter from "./filter/ay8910-clock-filter";
 import { RegisterFilterBuilder } from "./filter/register-filter";
 import SPFMModule, { SPFMModuleInfo } from "./spfm-module";
 import { YM2203ClockFilter, YM2608ClockFilter, YM2612ClockFilter } from "./filter/opn-clock-filter";
+import { YM2413ClockFilter, YM3526ClockFilter } from "./filter/opl-clock-filter";
 import YM2612ToYM2608Filter from "./filter/ym2612-to-ym2608-filter";
 
 export type CompatSpec = {
@@ -75,6 +76,12 @@ export function getClockConverterBuilder(type: string): RegisterFilterBuilder | 
   if (type === "ym2612") {
     return (inModule, outModule) => new YM2612ClockFilter(inModule.clock, outModule.clock);
   }
+  if (type === "ym2413") {
+    return (inModule, outModule) => new YM2413ClockFilter(inModule.clock, outModule.clock);
+  }
+  if (type === "ym3526" || type === "ym3812" || type === "y8950") {
+    return (inModule, outModule) => new YM3526ClockFilter(inModule.clock, outModule.clock);
+  }
   return null;
 }
 
@@ -84,27 +91,37 @@ export function getAvailableModules(
     useClockConverter?: boolean;
   }
 ): SPFMModuleInfo[] {
-  const result: SPFMModuleInfo[] = [];
+  const exacts: SPFMModuleInfo[] = [];
+  const adjusts: SPFMModuleInfo[] = [];
 
   // enumerate exact modules
   for (const device of availableDevices) {
     for (let i in device.modules) {
       const module = device.modules[i];
       if (module.type != null) {
-        result.push({
+        const info = {
           deviceId: device.id,
           rawType: module.type,
           type: module.type,
           slot: module.slot,
           rawClock: module.clock,
           clock: module.clock,
-          clockConverter: options.useClockConverter ? getClockConverterBuilder(module.type) : null,
+          clockConverter: null,
           typeConverter: null
-        });
+        };
+
+        exacts.push(info);
+
+        if (options.useClockConverter) {
+          const clockConverter = getClockConverterBuilder(module.type);
+          if (clockConverter) {
+            adjusts.push({ ...info, clockConverter });
+          }
+        }
       }
     }
   }
-  return result;
+  return exacts.concat(adjusts);
 }
 
 export function getAvailableCompatibleModules(
@@ -114,29 +131,37 @@ export function getAvailableCompatibleModules(
     useTypeConverter?: boolean;
   }
 ): SPFMModuleInfo[] {
-  const result: SPFMModuleInfo[] = [];
+  const exacts: SPFMModuleInfo[] = [];
+  const adjusts: SPFMModuleInfo[] = [];
+
   for (const device of availableDevices) {
     for (let i in device.modules) {
       const module = device.modules[i];
       if (module.type != null) {
         const compats = getCompatibleDevices(module.type);
         for (const compat of compats) {
-          result.push({
+          const info = {
             deviceId: device.id,
             rawType: module.type,
             type: compat.type,
             slot: module.slot,
             rawClock: module.clock,
             clock: module.clock / compat.clockDiv,
-            clockConverter: options.useClockConverter ? getClockConverterBuilder(compat.type) : null,
+            clockConverter: null,
             typeConverter: options.useTypeConverter ? getTypeConverterBuilder(compat.type, module.type) : null
-          });
+          };
+          exacts.push(info);
+          if (options.useClockConverter) {
+            const clockConverter = getClockConverterBuilder(compat.type);
+            if (clockConverter) {
+              adjusts.push({ ...info, clockConverter });
+            }
+          }
         }
       }
     }
   }
-
-  return result;
+  return exacts.concat(adjusts);
 }
 
 function findModule(availableModules: SPFMModuleInfo[], type: string, clock: number, fuzzyMatch: boolean = false) {
@@ -148,21 +173,22 @@ function findModule(availableModules: SPFMModuleInfo[], type: string, clock: num
         if (m.clock !== clock) return false;
       }
     }
-    if (m.typeConverter != null) return true;
     return m.type === type;
   });
 }
 
 export default class SPFMMapper {
   _config: SPFMMapperConfig;
-  _spfms: SPFM[] = [];
-  _spfmMap: { [key: string]: [SPFMModule] } = {};
+  _spfmMap: { [key: string]: SPFM } = {};
+  _spfmModuleMap: { [key: string]: [SPFMModule] } = {};
 
   constructor(config: SPFMMapperConfig) {
     this._config = config;
   }
 
   async open(modulesToOpen: { type: string; clock: number }[]) {
+    this._spfmModuleMap = {};
+
     const devices = await getAvailableDevices(this._config);
     let availableModules = getAvailableModules(devices, { useClockConverter: true });
     let availableCompatibleModules = getAvailableCompatibleModules(devices, {
@@ -171,7 +197,6 @@ export default class SPFMMapper {
     });
 
     const ports = await SPFM.rawList();
-    const spfms: { [key: string]: SPFM } = {};
 
     for (const requestedModule of modulesToOpen) {
       const target =
@@ -186,17 +211,18 @@ export default class SPFMMapper {
           if (port == null) {
             throw new Error("Can't find the device ${id}.");
           }
-          let spfm = spfms[port.path];
+          let spfm = this._spfmMap[port.path];
           if (spfm == null) {
             spfm = new SPFM(port.path);
             await spfm.open();
-            spfms[port.path] = spfm;
+            this._spfmMap[port.path] = spfm;
+          } else {
           }
           const mod = new SPFMModule(spfm, target, requestedModule.clock);
-          if (this._spfmMap[requestedModule.type] == null) {
-            this._spfmMap[requestedModule.type] = [mod];
+          if (this._spfmModuleMap[requestedModule.type] == null) {
+            this._spfmModuleMap[requestedModule.type] = [mod];
           } else {
-            this._spfmMap[requestedModule.type].push(mod);
+            this._spfmModuleMap[requestedModule.type].push(mod);
           }
 
           /* remove target */
@@ -209,13 +235,11 @@ export default class SPFMMapper {
         }
       }
     }
-
-    this._spfms = Object.values(spfms);
-    return this._spfmMap;
+    return this._spfmModuleMap;
   }
 
   getModule(type: string, index: number): SPFMModule | null {
-    const spfms = this._spfmMap[type];
+    const spfms = this._spfmModuleMap[type];
     if (spfms != null) {
       return spfms[index];
     }
@@ -230,16 +254,101 @@ export default class SPFMMapper {
   }
 
   async reset() {
-    for (const spfm of this._spfms) {
+    for (const spfm of Object.values(this._spfmMap)) {
       await spfm.reset();
     }
   }
 
+  async damp() {
+    for (const mods of Object.values(this._spfmModuleMap)) {
+      for (const mod of mods) {
+        switch (mod.rawType) {
+          case "ym2608":
+            /* ssg mute */
+            await mod.writeReg(0, 6, 0x3f);
+            await mod.writeReg(0, 8, 0x00);
+            await mod.writeReg(0, 9, 0x00);
+            await mod.writeReg(0, 10, 0x00);
+            /* adpcm reset */
+            await mod.writeReg(1, 0x00, 0x01);
+            /* rhythm damp */
+            await mod.writeReg(0, 0x10, 0);
+            /* sl=15,rr=15 */
+            for (let i = 0x80; i < 0x90; i++) {
+              await mod.writeReg(0, i, 0xff);
+              await mod.writeReg(1, i, 0xff);
+            }
+            /* fm key-off */
+            for (let i = 0; i < 8; i++) {
+              await mod.writeReg(0, 0x28, i);
+            }
+            break;
+          case "ym2612":
+            /* sl=15,rr=15 */
+            for (let i = 0x80; i < 0x90; i++) {
+              await mod.writeReg(0, i, 0xff);
+              await mod.writeReg(1, i, 0xff);
+            }
+            /* fm key-off */
+            for (let i = 0; i < 8; i++) {
+              await mod.writeReg(0, 0x28, i);
+            }
+            break;
+          case "ym2203":
+            /* ssg mute */
+            await mod.writeReg(0, 6, 0x3f);
+            await mod.writeReg(0, 8, 0x00);
+            await mod.writeReg(0, 9, 0x00);
+            await mod.writeReg(0, 10, 0x00);
+            /* sl=15,rr=15 */
+            for (let i = 0x80; i < 0x90; i++) {
+              await mod.writeReg(0, i, 0xff);
+            }
+            /* fm key-off */
+            for (let i = 0; i < 4; i++) {
+              await mod.writeReg(0, 0x28, i);
+            }
+            break;
+          case "ym3526":
+          case "ym3812":
+          case "y8950":
+            /* sl=15,rr=15 */
+            for (let i = 0x80; i < 0xa0; i++) {
+              await mod.writeReg(0, i, 0xff);
+            }
+            /* freq=0, key-off */
+            for (let i = 0xa0; i < 0xc0; i++) {
+              await mod.writeReg(0, i, 0);
+            }
+            /* rhythm off */
+            await mod.writeReg(0, 0xbd, 0);
+            break;
+          case "ym2413":
+            /* freq=0, key-off */
+            for (let i = 0x10; i < 0x30; i++) {
+              await mod.writeReg(0, i, 0);
+            }
+            break;
+          case "ay8910":
+            /* psg mute */
+            await mod.writeReg(0, 6, 0x3f);
+            await mod.writeReg(0, 8, 0x00);
+            await mod.writeReg(0, 9, 0x00);
+            await mod.writeReg(0, 10, 0x00);
+            break;
+          default:
+            await mod.spfm.reset();
+            break;
+        }
+      }
+    }
+  }
+
   async close() {
-    for (const spfm of this._spfms) {
+    for (const spfm of Object.values(this._spfmMap)) {
       await spfm.close();
     }
-    this._spfms = [];
     this._spfmMap = {};
+    this._spfmModuleMap = {};
   }
 }

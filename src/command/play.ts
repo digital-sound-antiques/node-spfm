@@ -8,19 +8,21 @@ import { formatMinSec } from "vgm-parser";
 import commandLineUsage from "command-line-usage";
 import SPFMMapperConfig from "../spfm-mapper-config";
 
-function getHeaderString() {
+function getHeaderString(playlist: boolean, file: string) {
+  if (playlist) {
+    return `\u001bcSPFM Player
+-----------
+
+Playlist File: ${file}
+`;
+  }
   return `SPFM Player
 -----------
-`;
+  `;
 }
 
-function getPlayListInfoString(file: string, entry: number, entries: string[]) {
-  return 1 < entries.length
-    ? `
-Playlist File:  ${file}
-Playlist Entry: ${entry} / ${entries.length}
-`
-    : "";
+function getPlayListRowString(file: string) {
+  return `Playlist File: ${file}`;
 }
 
 function getGaugeString(current: number, total: number, width: number) {
@@ -51,7 +53,8 @@ export default async function main(argv: string[]) {
   const optionDefinitions = [
     { name: "file", defaultOption: true },
     { name: "song", alias: "s", typeLabel: "{underline num}", description: "KSS subsong number.", type: Number },
-    { name: "help", alias: "h", type: Boolean, description: "Show this help." }
+    { name: "help", alias: "h", type: Boolean, description: "Show this help." },
+    { name: "force-reset", type: Boolean, description: "Always reset device after stop playing." }
   ];
   const sections = [
     {
@@ -123,7 +126,7 @@ export default async function main(argv: string[]) {
   let onKeyPress;
 
   try {
-    let playlist;
+    let playlist: string[];
 
     if (/.m3u$/i.test(file)) {
       playlist = loadM3UPlayList(file);
@@ -131,41 +134,39 @@ export default async function main(argv: string[]) {
       playlist = [file];
     }
 
-    const child_options = options.song ? ["-s", options.song] : [];
+    const child_options: string[] = [];
+    if (options.song) {
+      child_options.push("-s");
+      child_options.push(options.song);
+    }
+    if (options["force-reset"]) {
+      child_options.push("--force-reset");
+    }
 
     let child: ChildProcess;
     let index = 0;
-    let indexOffset = 0;
     let speed = 0;
-    let ctrlc = 0;
 
     onKeyPress = (ch: any, key: any) => {
       if (key) {
         if (playlist.length > 1 && index < playlist.length - 1 && (key.name === "n" || key.name === "pagedown")) {
-          child.send({ type: "stop" });
-          indexOffset = 1;
+          index++;
+          child.send({ type: "goto", index });
         }
         if (playlist.length > 1 && 0 < index && (key.name === "b" || key.name === "pageup")) {
-          indexOffset = -1;
-          child.send({ type: "stop" });
+          index--;
+          child.send({ type: "goto", index });
+        }
+        if (key.name === "r") {
+          child.send({ type: "reload", index });
         }
         if (key.name === "q") {
-          child.send({ type: "stop" });
-          indexOffset = playlist.length;
+          child.send({ type: "quit" });
         }
-
-        if (key.name === "r") {
-          child.send({ type: "stop" });
-          indexOffset = 0;
-        }
-
         if (key.ctrl && key.name === "c") {
           console.log("Ctrl-C pressed.");
-          ctrlc++;
-          child.send({ type: "stop" });
-          indexOffset = playlist.length;
+          child.send({ type: "quit" });
         }
-
         if (key.name === "right") {
           speed = Math.min(16, speed + 1);
           child.send({ type: "speed", value: speed });
@@ -182,41 +183,41 @@ export default async function main(argv: string[]) {
     };
     process.stdin.on("keypress", onKeyPress);
 
-    while (index < playlist.length) {
-      const file = playlist[index];
-      const banner =
-        (1 < playlist.length ? "\u001bc" : "") + getHeaderString() + getPlayListInfoString(file, index + 1, playlist);
-      speed = 0;
-      indexOffset = 1;
-      await new Promise((resolve, reject) => {
-        try {
-          const target = [__dirname, "../play-process"].join("/");
-          child = fork(target, ["--banner", banner, ...child_options, file]);
-          child.on("message", msg => {
-            if (msg.type === "progress") {
-              if (msg.total) {
-                const playing = ((msg.current / msg.total) * 100).toFixed(2);
-                process.stdout.write(
-                  `Playing ${playing}% \b\b\b\t${formatMinSec(msg.current)} / ${formatMinSec(msg.total)} seconds\r`
-                );
-              } else {
-                process.stdout.write(`Playing\t${formatMinSec(msg.current)} seconds\r`);
-              }
-            } else if (msg.type === "ram_write") {
-              if (msg.total) {
-                process.stdout.write(`${msg.title} [${getGaugeString(msg.current, msg.total, 16)}]              \r`);
-              } else {
-                process.stdout.write(`${msg.title}...`);
-              }
+    const banner = getHeaderString(1 < playlist.length, file);
+    speed = 0;
+
+    await new Promise((resolve, reject) => {
+      try {
+        const target = [__dirname, "../play-process"].join("/");
+        child = fork(target, ["--banner", banner, ...child_options, ...playlist]);
+        child.on("message", msg => {
+          if (msg.type === "error") {
+            console.error(msg.message);
+          } else if (msg.type === "start") {
+            index = msg.index;
+          } else if (msg.type === "stop") {
+          } else if (msg.type === "progress") {
+            if (msg.total) {
+              const playing = ((msg.current / msg.total) * 100).toFixed(2);
+              process.stdout.write(
+                `Playing ${playing}% \b\b\b\t${formatMinSec(msg.current)} / ${formatMinSec(msg.total)} seconds\r`
+              );
+            } else {
+              process.stdout.write(`Playing\t${formatMinSec(msg.current)} seconds\r`);
             }
-          });
-          child.on("close", () => resolve());
-        } catch (e) {
-          reject();
-        }
-      });
-      index += indexOffset;
-    }
+          } else if (msg.type === "ram_write") {
+            if (msg.total) {
+              process.stdout.write(`${msg.title} [${getGaugeString(msg.current, msg.total, 16)}]              \r`);
+            } else {
+              process.stdout.write(`${msg.title}...`);
+            }
+          }
+        });
+        child.on("close", () => resolve());
+      } catch (e) {
+        reject();
+      }
+    });
   } catch (e) {
     throw e;
   } finally {

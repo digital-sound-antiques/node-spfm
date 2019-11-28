@@ -89,10 +89,10 @@ export function printConfig() {
 
 function printModules(modules: SPFMModuleInfo[]) {
   for (const m of modules) {
+    const clock = m.clockConverter ? `${formatHz(m.clock)} * (clock adjust)` : `${formatHz(m.clock)}`;
     if (m.type === m.rawType) {
-      console.info(`${m.deviceId} SLOT${m.slot}: ${m.type.toUpperCase()} ${formatHz(m.clock)}`);
+      console.info(`${m.deviceId} SLOT${m.slot}: ${m.type.toUpperCase()} ${clock}`);
     } else {
-      const clock = m.clockConverter ? `${formatHz(m.clock)} + software clock adjustment` : `${formatHz(m.clock)}`;
       console.info(
         `${m.deviceId} SLOT${m.slot}: ${m.rawType.toUpperCase()} ${formatHz(
           m.rawClock

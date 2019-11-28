@@ -12,7 +12,7 @@ export default class AY8910ClockFilter implements RegisterFilter {
   }
 
   filterReg(context: any, data: RegisterData): RegisterData[] {
-    if (data.a != null && 0 <= data.a && data.a < 16) {
+    if (this._ratio !== 1.0 && data.a != null && 0 <= data.a && data.a < 16) {
       this._regs[data.a] = data.d;
       if (data.a < 6) {
         // freq

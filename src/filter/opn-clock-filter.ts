@@ -8,7 +8,7 @@ abstract class OPNClockFilterBase implements RegisterFilter {
     this._ratio = inClock / outClock;
   }
   filterReg(context: any, data: RegisterData): RegisterData[] {
-    if (data.a != null) {
+    if (this._ratio !== 1.0 && data.a != null) {
       if (0xa0 <= data.a && data.a < 0xb0) {
         this._regs[data.a] = data.d;
         const al = data.a & 0xfb;

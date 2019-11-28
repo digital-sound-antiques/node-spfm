@@ -24,7 +24,7 @@ async function stdoutSync(message: string) {
 const mapper = new SPFMMapper(SPFMMapperConfig.default);
 
 function formatHz(hz: number): string {
-  return `${(hz / 1000000).toFixed(2)}MHz`;
+  return `${(hz / 1000000).toFixed(6)}MHz`;
 }
 
 function toArrayBuffer(b: Buffer) {
@@ -66,6 +66,10 @@ Track Title:    ${kss.getTitle()}
 `;
 }
 
+function getPlayListInfoString(entry: number, entries: string[]) {
+  return 1 < entries.length ? `Playlist Entry: ${entry + 1} / ${entries.length}\n` : "";
+}
+
 function getInfoString(file: string, data: VGM | KSS, song: number = 0) {
   if (data instanceof VGM) {
     return getVGMInfoString(file, data);
@@ -88,7 +92,7 @@ function getModuleTableString(chips: string[], spfms: { [key: string]: [SPFMModu
             if (mod.moduleInfo.clockConverter == null) {
               clock = `(${formatHz(mod.rawClock)}${divStr}, clock mismatch)`;
             } else {
-              clock = `(${formatHz(mod.rawClock)}${divStr}, software adjusted)`;
+              clock = `(${formatHz(mod.rawClock)}${divStr}, clock adjusted)`;
             }
           } else {
             clock = `(${formatHz(mod.clock)})`;
@@ -126,30 +130,57 @@ function loadFile(file: string): VGM | KSS {
   return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(file));
 }
 
-async function play(file: string, options: CommandLineOptions) {
+let playIndex = 0;
+let forceResetRequested = false;
+let stopExternally = false;
+let quitRequested = false;
+let player: Player<any> | null = null;
+
+function sendMessage(message: { type: string } & any) {
+  if (process.send) {
+    process.send(message);
+  }
+}
+
+function messageHandler(msg: any) {
+  if (msg && msg.type === "reload") {
+    if (player != null) player.stop();
+    stopExternally = true;
+  }
+  if (msg && msg.type === "goto") {
+    playIndex = msg.index;
+    if (player != null) player.stop();
+    stopExternally = true;
+  }
+  if (msg && msg.type === "quit") {
+    if (player != null) player.stop();
+    quitRequested = true;
+    stopExternally = true;
+  }
+  if (msg && msg.type === "speed") {
+    if (player != null) player.setSpeed(msg.value);
+  }
+}
+
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(() => resolve(), ms));
+}
+
+async function play(index: number, options: CommandLineOptions): Promise<number> {
+  const file = options.files[index];
+
   if (!file) {
     throw new Error("Missing argument.");
   }
 
-  let player: Player<any> | null = null;
-  process.on("message", msg => {
-    if (msg && msg.type === "stop") {
-      if (player) {
-        player.stop();
-      }
-    }
-    if (msg && msg.type === "speed") {
-      if (player) {
-        player.setSpeed(msg.value);
-      }
-    }
-  });
-
-  let exitCode = 0;
   try {
+    process.on("message", messageHandler);
+
     const data: VGM | KSS = loadFile(file);
     const song = parseSongNumber(options.song);
-    stdoutSync((options.banner || "") + getInfoString(file, data, song));
+
+    sendMessage({ type: "start", index });
+    stdoutSync((options.banner || "") + getPlayListInfoString(index, options.files) + getInfoString(file, data, song));
 
     let modules: { type: string; clock: number }[] = [];
     if (data instanceof VGM) {
@@ -171,10 +202,16 @@ async function play(file: string, options: CommandLineOptions) {
       ];
     }
     const spfms = await mapper.open(modules);
+    await sleep(250);
+
     if (Object.keys(spfms).length == 0) {
-      stdoutSync("Can't assign any modules. Use `spfm config -m` to see a recognizable chip types.");
-      process.exit(0);
+      sendMessage({
+        type: "error",
+        message: "Can't assign any modules. Make sure proper module is installed on SPFM device."
+      });
+      return 1;
     }
+
     const types = modules.map(e => e.type).filter((elem, index, self) => self.indexOf(elem) === index);
     stdoutSync(`${getModuleTableString(types, spfms)}\n\n`);
 
@@ -186,24 +223,49 @@ async function play(file: string, options: CommandLineOptions) {
       player.setData(data, song);
     }
     await player.play();
+    sendMessage({ type: "stop", index });
     stdoutSync("\nPlaying finished.\n");
   } catch (e) {
-    console.error(e.message);
-    exitCode = 1;
+    throw e;
   } finally {
-    await mapper.close();
+    process.off("message", messageHandler);
+    await mapper.damp();
+    if (forceResetRequested) {
+      await sleep(100);
+      await mapper.reset();
+      forceResetRequested = false;
+    }
     if (player) {
       player.release();
     }
   }
-  process.exit(exitCode);
+  return 0;
 }
 
 const optionDefinitions = [
-  { name: "file", defaultOption: true },
+  { name: "files", defaultOption: true, multiple: true },
   { name: "banner", type: String },
-  { name: "song", alias: "s", type: String }
+  { name: "song", alias: "s", type: String },
+  { name: "force-reset", type: Boolean }
 ];
 
 const options = commandLineArgs(optionDefinitions);
-play(options.file, options);
+
+(async function() {
+  let exitCode = 0;
+  try {
+    while (!quitRequested && 0 <= playIndex && playIndex < options.files.length) {
+      if (options["force-reset"]) {
+        forceResetRequested = true;
+      }
+      stopExternally = false;
+      exitCode = await play(playIndex, options);
+      if (!stopExternally) playIndex++;
+    }
+  } catch (e) {
+    exitCode = 1;
+  } finally {
+    await mapper.close();
+    process.exit(exitCode);
+  }
+})();
