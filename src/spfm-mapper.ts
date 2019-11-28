@@ -262,7 +262,7 @@ export default class SPFMMapper {
   async damp() {
     for (const mods of Object.values(this._spfmModuleMap)) {
       for (const mod of mods) {
-        switch (mod.rawType) {
+        switch (mod.type) {
           case "ym2608":
             /* ssg mute */
             await mod.writeReg(0, 6, 0x3f);
