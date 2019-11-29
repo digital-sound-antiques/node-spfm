@@ -201,7 +201,10 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
         { type: "k051649", clock: Math.round(3579545 / 2) }
       ];
     }
-    const spfms = await mapper.open(modules);
+
+    const modulePriority = options.prioritize || [];
+
+    const spfms = await mapper.open(modules, modulePriority);
     await sleep(250);
 
     if (Object.keys(spfms).length == 0) {
@@ -214,6 +217,14 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
 
     const types = modules.map(e => e.type).filter((elem, index, self) => self.indexOf(elem) === index);
     stdoutSync(`${getModuleTableString(types, spfms)}\n\n`);
+
+    if (options.prioritize == null && 6 < modules.length) {
+      sendMessage({
+        type: "warn",
+        message:
+          "Optimal module binding feature has been disabled due to too many chips are used in a single VGM. Consider to use `--prioritize` option to specify priority chip types."
+      });
+    }
 
     if (data instanceof VGM) {
       player = new VGMPlayer(mapper);
@@ -245,8 +256,9 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
 const optionDefinitions = [
   { name: "files", defaultOption: true, multiple: true },
   { name: "banner", type: String },
-  { name: "song", alias: "s", type: String },
-  { name: "force-reset", type: Boolean }
+  { name: "song", type: String },
+  { name: "force-reset", type: Boolean },
+  { name: "prioritize", type: String, lazyMultiple: true }
 ];
 
 const options = commandLineArgs(optionDefinitions);
@@ -263,6 +275,7 @@ const options = commandLineArgs(optionDefinitions);
       if (!stopExternally) playIndex++;
     }
   } catch (e) {
+    sendMessage({ type: "error", message: e.message });
     exitCode = 1;
   } finally {
     await mapper.close();

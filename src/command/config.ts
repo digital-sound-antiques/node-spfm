@@ -96,7 +96,7 @@ function printModules(modules: SPFMModuleInfo[]) {
       console.info(
         `${m.deviceId} SLOT${m.slot}: ${m.rawType.toUpperCase()} ${formatHz(
           m.rawClock
-        )} => ${m.type.toUpperCase()} ${clock}`
+        )} as ${m.type.toUpperCase()} ${clock}`
       );
     }
   }

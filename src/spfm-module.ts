@@ -27,11 +27,11 @@ export default class SPFMModule {
     this.requestedClock = requestedClock;
 
     const outModuleInfo = { ...moduleInfo, clock: requestedClock };
-    if (moduleInfo.typeConverter) {
-      this._filters.push(moduleInfo.typeConverter(moduleInfo, outModuleInfo));
-    }
     if (moduleInfo.clockConverter) {
       this._filters.push(moduleInfo.clockConverter(moduleInfo, outModuleInfo));
+    }
+    if (moduleInfo.typeConverter) {
+      this._filters.push(moduleInfo.typeConverter(moduleInfo, outModuleInfo));
     }
   }
 

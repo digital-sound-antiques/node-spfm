@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 const keypress = require("keypress");
 import { ChildProcess, fork } from "child_process";
+import chalk from "chalk";
 
 import commandLineArgs from "command-line-args";
 import { formatMinSec } from "vgm-parser";
@@ -54,7 +55,14 @@ export default async function main(argv: string[]) {
     { name: "file", defaultOption: true },
     { name: "song", alias: "s", typeLabel: "{underline num}", description: "KSS subsong number.", type: Number },
     { name: "help", alias: "h", type: Boolean, description: "Show this help." },
-    { name: "force-reset", type: Boolean, description: "Always reset device after stop playing." }
+    { name: "force-reset", type: Boolean, description: "Always reset device after stop playing." },
+    {
+      name: "prioritize",
+      alias: "p",
+      type: String,
+      lazyMultiple: true,
+      description: "Assign modules with priority to the specified chip type."
+    }
   ];
   const sections = [
     {
@@ -136,11 +144,18 @@ export default async function main(argv: string[]) {
 
     const child_options: string[] = [];
     if (options.song) {
-      child_options.push("-s");
+      child_options.push("-song");
       child_options.push(options.song);
     }
     if (options["force-reset"]) {
       child_options.push("--force-reset");
+    }
+    if (options.prioritize) {
+      for (const p of options.prioritize) {
+        console.log(p);
+        child_options.push("--prioritize");
+        child_options.push(p.toLowerCase());
+      }
     }
 
     let child: ChildProcess;
@@ -192,7 +207,9 @@ export default async function main(argv: string[]) {
         child = fork(target, ["--banner", banner, ...child_options, ...playlist]);
         child.on("message", msg => {
           if (msg.type === "error") {
-            console.error(msg.message);
+            console.error(`${chalk.red("Error: " + msg.message)}\n`);
+          } else if (msg.type === "warn") {
+            console.warn(`${chalk.yellow("Warning: " + msg.message)}\n`);
           } else if (msg.type === "start") {
             index = msg.index;
           } else if (msg.type === "stop") {

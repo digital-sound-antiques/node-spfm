@@ -5,7 +5,10 @@ import { RegisterFilterBuilder } from "./filter/register-filter";
 import SPFMModule, { SPFMModuleInfo } from "./spfm-module";
 import { YM2203ClockFilter, YM2608ClockFilter, YM2612ClockFilter } from "./filter/opn-clock-filter";
 import { YM2413ClockFilter, YM3526ClockFilter } from "./filter/opl-clock-filter";
+import SN76489ClockFilter from "./filter/sn76489-clock-filter";
 import YM2612ToYM2608Filter from "./filter/ym2612-to-ym2608-filter";
+import SN76489ToAY8910Filter from "./filter/sn76489-to-ay8910-filter";
+import SerialPort from "serialport";
 
 export type CompatSpec = {
   type: string;
@@ -24,13 +27,19 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
         { type: "y8950", clockDiv: 1 }
       ];
     case "ym2203":
-      return [{ type: "ay8910", clockDiv: 2 }];
+      return [
+        { type: "sn76489", clockDiv: 1 },
+        { type: "ay8910", clockDiv: 2 }
+      ];
     case "ym2608":
       return [
         { type: "ym2612", clockDiv: 1 },
         { type: "ym2203", clockDiv: 2 },
+        { type: "sn76489", clockDiv: 2 },
         { type: "ay8910", clockDiv: 4 }
       ];
+    case "ay8910":
+      return [{ type: "sn76489", clockDiv: 0.5 }];
     default:
       return [];
   }
@@ -60,6 +69,9 @@ export function getTypeConverterBuilder(inType: string, outType: string): Regist
   if (inType === "ym2612" && outType === "ym2608") {
     return () => new YM2612ToYM2608Filter();
   }
+  if (inType === "sn76489" && (outType === "ay8910" || outType === "ym2203" || outType === "ym2608")) {
+    return () => new SN76489ToAY8910Filter();
+  }
   return null;
 }
 
@@ -82,6 +94,9 @@ export function getClockConverterBuilder(type: string): RegisterFilterBuilder | 
   if (type === "ym3526" || type === "ym3812" || type === "y8950") {
     return (inModule, outModule) => new YM3526ClockFilter(inModule.clock, outModule.clock);
   }
+  if (type === "sn76489") {
+    return (inModule, outModule) => new SN76489ClockFilter(inModule.clock, outModule.clock);
+  }
   return null;
 }
 
@@ -94,7 +109,6 @@ export function getAvailableModules(
   const exacts: SPFMModuleInfo[] = [];
   const adjusts: SPFMModuleInfo[] = [];
 
-  // enumerate exact modules
   for (const device of availableDevices) {
     for (let i in device.modules) {
       const module = device.modules[i];
@@ -177,6 +191,93 @@ function findModule(availableModules: SPFMModuleInfo[], type: string, clock: num
   });
 }
 
+type TargetInfo = SPFMModuleInfo & { requestedClock: number };
+
+function findTargets(
+  ports: SerialPort.PortInfo[],
+  directModules: SPFMModuleInfo[],
+  compatModules: SPFMModuleInfo[],
+  modulesToOpen: { type: string; clock: number }[]
+): TargetInfo[] {
+  const result: TargetInfo[] = [];
+  let directs = [...directModules];
+  let compats = [...compatModules];
+
+  for (const m of modulesToOpen) {
+    const target =
+      findModule(directs, m.type, m.clock) ||
+      findModule(directs, m.type, m.clock, true) ||
+      findModule(compats, m.type, m.clock) ||
+      findModule(compats, m.type, m.clock, true);
+    if (target != null) {
+      const port = ports.find(e => e.serialNumber === target.deviceId);
+      if (port != null) {
+        result.push({ requestedClock: m.clock, ...target });
+        /* remove used target */
+        directs = directs.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
+        compats = compats.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
+      }
+    }
+  }
+  return result;
+}
+
+function makeCombinations<T>(array: T[], nestLimit: number = 0): T[][] {
+  const results: T[][] = [];
+  if (nestLimit == 0) {
+    nestLimit = array.length;
+  }
+  if (nestLimit == 1 || array.length == 1) {
+    return [array];
+  }
+  for (let i = 0; i < array.length; i++) {
+    const pick = array[i];
+    const remains = array.slice(0);
+    remains.splice(i, 1);
+    const combo = makeCombinations(remains, nestLimit - 1);
+    for (const a of combo) {
+      results.push([pick].concat(a));
+    }
+  }
+  return results;
+}
+
+function findOptimalTargets(
+  ports: SerialPort.PortInfo[],
+  directModules: SPFMModuleInfo[],
+  compatModules: SPFMModuleInfo[],
+  modulesToOpen: { type: string; clock: number }[],
+  modulePriority: string[]
+): TargetInfo[] {
+  const priors = [];
+  const others = [];
+  for (const type of modulePriority) {
+    for (const m of modulesToOpen) {
+      if (m.type === type) priors.push(m);
+    }
+  }
+  for (const m of modulesToOpen) {
+    if (modulePriority.indexOf(m.type) < 0) {
+      others.push(m);
+    }
+  }
+  if (1 < others.length && others.length <= 6) {
+    const combos = makeCombinations(others, 6);
+    let result: TargetInfo[] = [];
+    for (const aseq of combos) {
+      const targets = findTargets(ports, directModules, compatModules, priors.concat(aseq));
+      if (targets.length > result.length) {
+        result = targets;
+        if (result.length === modulesToOpen.length) {
+          break;
+        }
+      }
+    }
+    return result;
+  }
+  return findTargets(ports, directModules, compatModules, priors.concat(others));
+}
+
 export default class SPFMMapper {
   _config: SPFMMapperConfig;
   _spfmMap: { [key: string]: SPFM } = {};
@@ -186,53 +287,39 @@ export default class SPFMMapper {
     this._config = config;
   }
 
-  async open(modulesToOpen: { type: string; clock: number }[]) {
+  async open(modulesToOpen: { type: string; clock: number }[], modulePriority: string[]) {
     this._spfmModuleMap = {};
 
     const devices = await getAvailableDevices(this._config);
-    let availableModules = getAvailableModules(devices, { useClockConverter: true });
-    let availableCompatibleModules = getAvailableCompatibleModules(devices, {
+    let directModules = getAvailableModules(devices, { useClockConverter: true });
+    let compatModules = getAvailableCompatibleModules(devices, {
       useClockConverter: true,
       useTypeConverter: true
     });
 
     const ports = await SPFM.rawList();
+    const targets = findOptimalTargets(ports, directModules, compatModules, modulesToOpen, modulePriority);
 
-    for (const requestedModule of modulesToOpen) {
-      const target =
-        findModule(availableModules, requestedModule.type, requestedModule.clock) ||
-        findModule(availableModules, requestedModule.type, requestedModule.clock, true) ||
-        findModule(availableCompatibleModules, requestedModule.type, requestedModule.clock) ||
-        findModule(availableCompatibleModules, requestedModule.type, requestedModule.clock, true);
-
-      if (target != null) {
-        try {
-          const port = ports.find(e => e.serialNumber === target.deviceId);
-          if (port == null) {
-            throw new Error("Can't find the device ${id}.");
-          }
-          let spfm = this._spfmMap[port.path];
-          if (spfm == null) {
-            spfm = new SPFM(port.path);
-            await spfm.open();
-            this._spfmMap[port.path] = spfm;
-          } else {
-          }
-          const mod = new SPFMModule(spfm, target, requestedModule.clock);
-          if (this._spfmModuleMap[requestedModule.type] == null) {
-            this._spfmModuleMap[requestedModule.type] = [mod];
-          } else {
-            this._spfmModuleMap[requestedModule.type].push(mod);
-          }
-
-          /* remove target */
-          availableModules = availableModules.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
-          availableCompatibleModules = availableCompatibleModules.filter(
-            e => e.deviceId !== target.deviceId || e.slot !== target.slot
-          );
-        } catch (e) {
-          console.info(e.message);
+    for (const target of targets) {
+      try {
+        const port = ports.find(e => e.serialNumber === target.deviceId);
+        if (port == null) {
+          throw new Error("Can't find the device ${id}.");
         }
+        let spfm = this._spfmMap[port.path];
+        if (spfm == null) {
+          spfm = new SPFM(port.path);
+          await spfm.open();
+          this._spfmMap[port.path] = spfm;
+        }
+        const mod = new SPFMModule(spfm, target, target.requestedClock);
+        if (this._spfmModuleMap[target.type] == null) {
+          this._spfmModuleMap[target.type] = [mod];
+        } else {
+          this._spfmModuleMap[target.type].push(mod);
+        }
+      } catch (e) {
+        console.info(e.message);
       }
     }
     return this._spfmModuleMap;
@@ -335,6 +422,13 @@ export default class SPFMMapper {
             await mod.writeReg(0, 8, 0x00);
             await mod.writeReg(0, 9, 0x00);
             await mod.writeReg(0, 10, 0x00);
+            break;
+          case "sn76489":
+            /* vol = 0 */
+            await mod.writeReg(null, null, 0x9f);
+            await mod.writeReg(null, null, 0xbf);
+            await mod.writeReg(null, null, 0xdf);
+            await mod.writeReg(null, null, 0xff);
             break;
           default:
             await mod.spfm.reset();
