@@ -301,9 +301,8 @@ export default class VGMPlayer implements Player<VGM> {
     while (!this._eos && this._index < this._data!.byteLength) {
       const elapsed = microtime.now() - t;
 
-      await this._sendProgress(this._headSamples, this._loopSamples * this._loop);
-
       if (elapsed >= 100 * 1000) {
+        await this._sendProgress(this._headSamples, this._loopSamples * this._loop);
         await processNodeEventLoop();
         t = microtime.now();
       }
