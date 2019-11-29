@@ -105,11 +105,11 @@ export default class KSSPlayer implements Player<KSS> {
     let count = 0;
 
     while (!this._eos) {
-      if (count % 4096 === 0) {
-        if (process.send) {
-          process.send({ type: "progress", current: count, total: 0 });
-        }
-      }
+      // if (count % 4096 === 0) {
+      //   if (process.send) {
+      //     process.send({ type: "progress", current: count, total: 0 });
+      //   }
+      // }
       if (count % 512 === 0) {
         await processNodeEventLoop();
       }
