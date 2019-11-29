@@ -240,12 +240,13 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
     throw e;
   } finally {
     process.off("message", messageHandler);
-    await mapper.damp();
     if (forceResetRequested) {
-      await sleep(100);
       await mapper.reset();
       forceResetRequested = false;
+    } else {
+      await mapper.damp();
     }
+    await sleep(100);
     if (player) {
       player.release();
     }

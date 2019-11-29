@@ -429,6 +429,15 @@ export default class SPFMMapper {
             await mod.writeReg(null, null, 0xbf);
             await mod.writeReg(null, null, 0xdf);
             await mod.writeReg(null, null, 0xff);
+            /* freq = 0 */
+            await mod.writeReg(null, null, 0x80 | (0 << 5));
+            await mod.writeReg(null, null, 0);
+            await mod.writeReg(null, null, 0x80 | (1 << 5));
+            await mod.writeReg(null, null, 0);
+            await mod.writeReg(null, null, 0x80 | (2 << 5));
+            await mod.writeReg(null, null, 0);
+            await mod.writeReg(null, null, 0x80 | (3 << 5));
+            await mod.writeReg(null, null, 0);
             break;
           default:
             await mod.spfm.reset();
