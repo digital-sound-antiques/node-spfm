@@ -278,7 +278,10 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
     }
 
     if (data instanceof VGM) {
-      player = new VGMPlayer(mapper);
+      const vgmPlayerOptions = {
+        ym2612DACEmulationMode: options["simulate-ym2612-dac"]
+      };
+      player = new VGMPlayer(mapper, vgmPlayerOptions);
       player.setData(data);
     } else {
       player = new KSSPlayer(mapper);
@@ -316,6 +319,7 @@ const optionDefinitions = [
   { name: "banner", type: String },
   { name: "song", type: String },
   { name: "force-reset", type: Boolean },
+  { name: "simulate-ym2612-dac", type: String },
   { name: "prioritize", type: String, lazyMultiple: true }
 ];
 

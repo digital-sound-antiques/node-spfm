@@ -61,8 +61,17 @@ export default async function main(argv: string[]) {
       name: "prioritize",
       alias: "p",
       type: String,
+      typeLabel: "{underline chip}",
       lazyMultiple: true,
       description: "Assign modules with priority to the specified chip type."
+    },
+    {
+      name: "simulate-ym2612-dac",
+      type: String,
+      typeLabel: "{underline mode}",
+      defaultValue: "adpcm",
+      description:
+        "(Experimental) Simulate YM2612 DAC stream with YM2608's SSG or ADPCM. Valid values are 'none', 'ssg', 'adpcm' or 'adpcm2'. The default value is 'adpcm'. If 'adpcm' results wrong playback, use 'adpcm2' instead."
     }
   ];
   const sections = [
@@ -155,10 +164,17 @@ export default async function main(argv: string[]) {
     }
     if (options.prioritize) {
       for (const p of options.prioritize) {
-        console.log(p);
         child_options.push("--prioritize");
         child_options.push(p.toLowerCase());
       }
+    }
+    if (options["simulate-ym2612-dac"] != null) {
+      const value = options["simulate-ym2612-dac"].toLowerCase();
+      if (["none", "ssg", "adpcm", "adpcm2"].indexOf(value) < 0) {
+        throw new Error(`Invalid parameter: ${value}`);
+      }
+      child_options.push("--simulate-ym2612-dac");
+      child_options.push(value);
     }
 
     let child: ChildProcess;
@@ -209,7 +225,6 @@ export default async function main(argv: string[]) {
     await new Promise((resolve, reject) => {
       try {
         const target = [__dirname, "../play-process"].join("/");
-        console.log(target);
         child = fork(target, ["--banner", banner, ...child_options, ...playlist]);
         child.on("message", msg => {
           if (msg.type === "error") {
