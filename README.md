@@ -1,6 +1,6 @@
 # node-spfm
 
-A command-line controller for [SPFM-Light](http://www.pyonpyon.jp/~gasshi/fm/spfmlight.html).
+A command-line controller for [SPFM Light](http://www.pyonpyon.jp/~gasshi/fm/spfmlight.html).
 
 ![](./images/node-spfm.png)
 
