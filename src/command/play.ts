@@ -147,7 +147,7 @@ export default async function main(argv: string[]) {
 
     const child_options: string[] = [];
     if (options.song) {
-      child_options.push("-song");
+      child_options.push("--song");
       child_options.push(options.song);
     }
     if (options["force-reset"]) {
@@ -209,6 +209,7 @@ export default async function main(argv: string[]) {
     await new Promise((resolve, reject) => {
       try {
         const target = [__dirname, "../play-process"].join("/");
+        console.log(target);
         child = fork(target, ["--banner", banner, ...child_options, ...playlist]);
         child.on("message", msg => {
           if (msg.type === "error") {

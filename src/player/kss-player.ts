@@ -77,9 +77,8 @@ export default class KSSPlayer implements Player<KSS> {
     }
   }
 
-  setData(kss: KSS, song: number) {
+  setData(kss: KSS) {
     this._kssplay.setData(kss);
-    this._song = song;
     this.reset();
   }
 

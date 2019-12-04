@@ -1,3 +1,13 @@
+# v0.7.1
+- KSSファイル用の曲番号＆タイトル指定付きM3Uに対応しました。次の形式で書かれたM3Uを読み込めます。
+
+  ```
+  filename.kss::KSS,$01,Song 1 Title
+  filename.kss::KSS,$02,Song 2 Title
+  filename.kss::KSS,$03,Song 3 Title
+  ...
+  ```
+
 # v0.7.0
 - YM2203/YM2608 で SN76489 を再生できるようになりました。矩形波を FM 音源部で、ノイズを SSG で代替演奏します。
 - YM2608 の ADPCM 転送速度を改善しました。

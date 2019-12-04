@@ -66,3 +66,21 @@ See 'spfm <command> --help' to read about a specific command usage.
 - Shift + PageUp/B - Previous 10 Tracks
 - Shift + PageDown/N - Next 10 Tracks
 
+# M3U KSS Extension Support
+`spfm play` command accepts the extended M3U file contains KSS song index and title.
+The entry of the extended M3U is comma-separated value as following.
+
+```
+<filename>::KSS,<song>,<title>
+```
+
+- `<filename>` specifies relative path for KSS. The file extension must be kss or zip.
+- `<song>` specifies song index in hex ($00,$01,...) or decimal (0,1,2...) format.
+
+Example of extended M3U is like this:
+
+```
+foo.kss::KSS,$80,Foo Song 128 Title
+foo.kss::KSS,$81,Foo Song 129 Title
+bar.zip::KSS,$01,Bar Title
+```

@@ -1,9 +1,7 @@
 import fs from "fs";
 import path from "path";
 import SPFMMapperConfig from "./spfm-mapper-config";
-
 import commandLineArgs, { CommandLineOptions } from "command-line-args";
-
 import zlib from "zlib";
 import SPFMMapper from "./spfm-mapper";
 import VGMPlayer from "./player/vgm-player";
@@ -12,6 +10,7 @@ import KSSPlayer from "./player/kss-player";
 import { KSS } from "libkss-js";
 import Player from "./player/player";
 import SPFMModule from "./spfm-module";
+import { fileURLToPath } from "url";
 
 async function stdoutSync(message: string) {
   return new Promise((resolve, reject) => {
@@ -57,24 +56,34 @@ Used chips:     ${usedChips.join(", ")}
 `;
 }
 
-function getKSSInfoString(file: string, kss: KSS, song: number) {
-  return `File Name:      ${path.basename(file)}
+function getKSSInfoString(file: string, kss: KSS, m3u?: M3UItem) {
+  const title = m3u ? m3u.title || kss.getTitle() : kss.getTitle();
+  if (m3u) {
+    return `File Name:      ${path.basename(m3u.file)} $${("0" + m3u.song.toString(16)).slice(-2)}(${m3u.song})
 
-Track Title:    ${kss.getTitle()}
+Track Title:    ${m3u.title || kss.getTitle()}
 
 
 `;
+  } else {
+    return `File Name:      ${path.basename(file)}
+
+    Track Title:    ${kss.getTitle()}
+    
+    
+    `;
+  }
 }
 
 function getPlayListInfoString(entry: number, entries: string[]) {
   return 1 < entries.length ? `Playlist Entry: ${entry + 1} / ${entries.length}\n` : "";
 }
 
-function getInfoString(file: string, data: VGM | KSS, song: number = 0) {
+function getInfoString(file: string, data: VGM | KSS, m3u?: M3UItem) {
   if (data instanceof VGM) {
     return getVGMInfoString(file, data);
   }
-  return getKSSInfoString(file, data, song);
+  return getKSSInfoString(file, data, m3u);
 }
 
 function getModuleTableString(chips: string[], spfms: { [key: string]: [SPFMModule] }) {
@@ -105,17 +114,58 @@ function getModuleTableString(chips: string[], spfms: { [key: string]: [SPFMModu
   return "Mapped modules: " + result.join("\n                ");
 }
 
-function parseSongNumber(s: string | null) {
+function parseSongNumber(s: string | null): number | undefined {
   if (s == null) {
-    return 0;
+    return undefined;
   }
   if (s.indexOf("0x") === 0) {
     return parseInt(s.slice(2), 16);
+  } else if (s.indexOf("$") === 0) {
+    return parseInt(s.slice(1), 16);
   }
   return parseInt(s);
 }
 
-function loadFile(file: string): VGM | KSS {
+type M3UItem = {
+  type: string;
+  file: string;
+  basename: string;
+  ext: string;
+  song: number;
+  title: string;
+};
+
+function parseM3UItem(item: string): M3UItem | undefined {
+  const m = item.match(/^(.*)\.(kss|zip)::kss\s*,\s*(\$?[0-9A-F]+)(\s*,\s*(.*))?$/i);
+  if (m != null) {
+    return {
+      type: "kss",
+      file: `${m[1]}.${m[2]}`,
+      basename: m[1],
+      ext: m[2],
+      song: parseSongNumber(m[3]) || 0,
+      title: m[5].trim().replace(/\\,/g, ",")
+    };
+  }
+  return undefined;
+}
+
+function loadFromM3UItem(item: M3UItem): KSS {
+  const file = item.basename + ".kss";
+  if (fs.existsSync(file)) {
+    const buf = fs.readFileSync(file);
+    return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(file), item.song);
+  }
+  const zipFile = item.basename + ".zip";
+  if (fs.existsSync(file)) {
+    const zip = fs.readFileSync(zipFile);
+    const buf = zlib.gunzipSync(zip);
+    return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(zipFile), item.song);
+  }
+  throw new Error(`Can't load entry: ${item.file}`);
+}
+
+function loadFile(file: string, song: number): VGM | KSS {
   const buf = fs.readFileSync(file);
   if (/\.vg(m|z)$/.test(file)) {
     let vgmContext: Buffer;
@@ -126,8 +176,7 @@ function loadFile(file: string): VGM | KSS {
     }
     return VGM.parse(toArrayBuffer(vgmContext));
   }
-
-  return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(file));
+  return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(file), song);
 }
 
 let playIndex = 0;
@@ -176,11 +225,12 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
   try {
     process.on("message", messageHandler);
 
-    const data: VGM | KSS = loadFile(file);
-    const song = parseSongNumber(options.song);
+    const song = parseSongNumber(options.song) || 0;
+    const item = parseM3UItem(file);
+    const data: VGM | KSS = item ? loadFromM3UItem(item) : loadFile(file, song);
 
     sendMessage({ type: "start", index });
-    stdoutSync((options.banner || "") + getPlayListInfoString(index, options.files) + getInfoString(file, data, song));
+    stdoutSync((options.banner || "") + getPlayListInfoString(index, options.files) + getInfoString(file, data, item));
 
     let modules: { type: string; clock: number }[] = [];
     if (data instanceof VGM) {
@@ -196,6 +246,7 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
     } else {
       modules = [
         { type: "ay8910", clock: Math.round(3579545 / 2) },
+        { type: "sn76489", clock: 3579545 },
         { type: "ym2413", clock: 3579545 },
         { type: "y8950", clock: 3579545 },
         { type: "k051649", clock: Math.round(3579545 / 2) }
@@ -231,7 +282,7 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
       player.setData(data);
     } else {
       player = new KSSPlayer(mapper);
-      player.setData(data, song);
+      player.setData(data);
     }
     await player.play();
     sendMessage({ type: "stop", index });
