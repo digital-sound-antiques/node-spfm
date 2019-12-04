@@ -41,8 +41,9 @@ function getGaugeString(current: number, total: number, width: number) {
 
 function loadM3UPlayList(file: string) {
   const dirname = path.dirname(file);
-  return fs
-    .readFileSync(file, { encoding: "utf-8" })
+  let text = fs.readFileSync(file, { encoding: "utf-8" });
+  return text
+    .replace(/^\ufeff/, "")
     .replace(/^#.*$/gm, "")
     .replace(/\r\n/g, "\n")
     .split(/\n/)
@@ -84,7 +85,9 @@ export default async function main(argv: string[]) {
         "Cursor Down - Default playback speed.",
         "R - Restart current Track",
         "PageUp/B - Previous Track",
-        "PageDown/N - Next Track"
+        "PageDown/N - Next Track",
+        "Shift + PageUp/B - Previous 10 Tracks",
+        "Shift + PageDown/N - Next 10 Tracks"
       ]
     },
     {
@@ -164,12 +167,14 @@ export default async function main(argv: string[]) {
 
     onKeyPress = (ch: any, key: any) => {
       if (key) {
-        if (playlist.length > 1 && index < playlist.length - 1 && (key.name === "n" || key.name === "pagedown")) {
-          index++;
+        if (key.name === "n" || key.name === "pagedown") {
+          index += key.shift ? 10 : 1;
+          index = Math.min(playlist.length - 1, index);
           child.send({ type: "goto", index });
         }
-        if (playlist.length > 1 && 0 < index && (key.name === "b" || key.name === "pageup")) {
-          index--;
+        if (key.name === "b" || key.name === "pageup") {
+          index -= key.shift ? 10 : 1;
+          index = Math.max(0, index);
           child.send({ type: "goto", index });
         }
         if (key.name === "r") {
@@ -217,10 +222,10 @@ export default async function main(argv: string[]) {
             if (msg.total) {
               const playing = ((msg.current / msg.total) * 100).toFixed(2);
               process.stdout.write(
-                `Playing ${playing}% \b\b\b\t${formatMinSec(msg.current)} / ${formatMinSec(msg.total)} seconds\r`
+                `Playing ${playing}% ${formatMinSec(msg.current)} / ${formatMinSec(msg.total)} seconds              \r`
               );
             } else {
-              process.stdout.write(`Playing\t${formatMinSec(msg.current)} seconds\r`);
+              process.stdout.write(`Playing\t${formatMinSec(msg.current)} seconds          \r`);
             }
           } else if (msg.type === "ram_write") {
             if (msg.total) {

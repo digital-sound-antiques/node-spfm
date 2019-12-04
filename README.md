@@ -61,6 +61,8 @@ See 'spfm <command> --help' to read about a specific command usage.
 - Cursor Left/Right - Down/Up playback speed. 
 - Cursor Down - Reset playback speed.       
 - R - Restart current Track                   
-- PageUp/B - Previous Track                   
+- PageUp/B - Previous Track            
 - PageDown/N - Next Track        
+- Shift + PageUp/B - Previous 10 Tracks
+- Shift + PageDown/N - Next 10 Tracks
 

@@ -19,6 +19,7 @@ export default class SPFMModule {
   slot: number;
   requestedClock: number;
   _filters: RegisterFilter[] = [];
+  _writeWait = 0;
   constructor(spfm: SPFM, moduleInfo: SPFMModuleInfo, requestedClock: number) {
     this.spfm = spfm;
     this.moduleInfo = moduleInfo;
@@ -33,6 +34,8 @@ export default class SPFMModule {
     if (moduleInfo.typeConverter) {
       this._filters.push(moduleInfo.typeConverter(moduleInfo, outModuleInfo));
     }
+
+    this._writeWait = this.moduleInfo.rawType === "ym2413" ? 1 : 0;
   }
 
   get isCompatible() {
@@ -75,9 +78,7 @@ export default class SPFMModule {
       }
       regDatas = res;
     }
-    for (const data of regDatas) {
-      await this.spfm.writeReg(this.slot, data.port, data.a, data.d);
-    }
+    await this.spfm.writeRegs(this.slot, regDatas, this._writeWait);
   }
 
   getDebugString() {

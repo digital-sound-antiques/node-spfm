@@ -237,7 +237,13 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
     sendMessage({ type: "stop", index });
     stdoutSync("\nPlaying finished.\n");
   } catch (e) {
-    throw e;
+    sendMessage({ type: "error", message: e.message });
+    if (options.files.length === 1) {
+      throw e;
+    }
+    while (!stopExternally && !quitRequested) {
+      await sleep(100);
+    }
   } finally {
     process.off("message", messageHandler);
     if (forceResetRequested) {
@@ -275,9 +281,6 @@ const options = commandLineArgs(optionDefinitions);
       exitCode = await play(playIndex, options);
       if (!stopExternally) playIndex++;
     }
-  } catch (e) {
-    sendMessage({ type: "error", message: e.message });
-    exitCode = 1;
   } finally {
     await mapper.close();
     process.exit(exitCode);

@@ -137,13 +137,12 @@ export default class VGMPlayer implements Player<VGM> {
     return this._mapper.writeReg(chip, index, port, a & 0x7f, d);
   }
 
-  _writeYm2612_2a(n: number) {
+  async _writeYm2612_2a(n: number) {
     this._waitingFrame += n;
   }
 
   _seekPcmDataBank() {
-    var offset = this._readDword();
-    return offset;
+    this._readDword();
   }
 
   async _ramWriteProgress(title: string, current: number, total: number) {
@@ -167,8 +166,8 @@ export default class VGMPlayer implements Player<VGM> {
     const mod = this._mapper.getModule("ym2608", index);
 
     if (mod) {
-      await mod.writeReg(1, 0x10, 0x13); // BRDY EOS Enable
-      await mod.writeReg(1, 0x10, 0x80); // Rest Flags
+      await mod.writeReg(1, 0x00, 0x01); //
+      await mod.writeReg(1, 0x10, 0x80); // Reset Flags
       await mod.writeReg(1, 0x00, 0x60); // Memory Write
       await mod.writeReg(1, 0x01, 0x00); // Memory Type
       await mod.writeReg(1, 0x02, start & 0xff);
@@ -183,8 +182,6 @@ export default class VGMPlayer implements Player<VGM> {
           this._ramWriteProgress(title, i, data.length);
         }
         await mod.writeReg(1, 0x08, data[i]);
-        await mod.writeReg(1, 0x10, 0x1b);
-        await mod.writeReg(1, 0x10, 0x13);
       }
       await mod.writeReg(1, 0x00, 0x00);
       await mod.writeReg(1, 0x10, 0x80);
@@ -207,11 +204,14 @@ export default class VGMPlayer implements Player<VGM> {
       var block = this._processDataBlock();
       if (block.type == 0x81) {
         await this._processYM2608DeltaPCMData(0, block);
+        await new Promise(resolve => setTimeout(() => resolve(), 250));
+        this._sleeper.reset();
       } else {
         this._index += block.size;
       }
     } else if (d == 0x61) {
-      this._waitingFrame += this._readWord();
+      const n = this._readWord();
+      this._waitingFrame += n;
     } else if (d == 0x62) {
       this._waitingFrame += 735;
     } else if (d == 0x63) {
@@ -257,13 +257,19 @@ export default class VGMPlayer implements Player<VGM> {
       await this._write2("ay8910");
     } else if (d == 0xb0) {
       await this._write2("rf5c68");
-    } else if (d == 0xb4) {
-      await this._write2("nesApu");
+    } else if (0xb0 <= d && d <= 0xbf) {
+      this._index += 2;
+    } else if (0xc0 <= d && d <= 0xc8) {
+      this._index += 3;
     } else if (d == 0xd2) {
       const port = this._readByte();
       await this._write2("k051649", port);
+    } else if (0xd0 <= d && d <= 0xd6) {
+      this._index += 3;
     } else if (d == 0xe0) {
-      await this._seekPcmDataBank();
+      this._seekPcmDataBank();
+    } else if (d == 0xe1) {
+      this._index += 3;
     } else if (0x70 <= d && d <= 0x7f) {
       this._waitingFrame += (d & 0xf) + 1;
     } else if (0x80 <= d && d <= 0x8f) {
@@ -293,8 +299,13 @@ export default class VGMPlayer implements Player<VGM> {
   async play() {
     const sleepType = "atomics";
 
-    this._headSamples = this._vgm!.samples.total - (this._vgm!.samples.loop || 0);
-    this._loopSamples = this._vgm!.samples.loop || this._vgm!.samples.total;
+    if (0 < this._vgm!.offsets.loop) {
+      this._headSamples = this._vgm!.samples.total - this._vgm!.samples.loop;
+      this._loopSamples = this._vgm!.samples.loop * this._loop;
+    } else {
+      this._headSamples = 0;
+      this._loopSamples = this._vgm!.samples.total;
+    }
 
     let t = microtime.now();
 
@@ -302,12 +313,12 @@ export default class VGMPlayer implements Player<VGM> {
       const elapsed = microtime.now() - t;
 
       if (elapsed >= 100 * 1000) {
-        await this._sendProgress(this._headSamples, this._loopSamples * this._loop);
+        await this._sendProgress(this._headSamples, this._loopSamples);
         await processNodeEventLoop();
         t = microtime.now();
       }
 
-      if (this._currentFrame > this._headSamples + this._loopSamples * this._loop) {
+      if (this._currentFrame > this._headSamples + this._loopSamples) {
         this._eos = true;
         return;
       }

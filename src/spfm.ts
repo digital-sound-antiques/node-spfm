@@ -162,16 +162,45 @@ export default class SPFM {
   async writeReg(slot: number, port: number | null, a: number | null, d: number) {
     if (this.type === "SPFM_Light") {
       if (port != null && a != null) {
-        await this._write([slot & 1, (port & 7) << 1, a, d, 0x80]);
+        await this._write([slot & 1, (port & 7) << 1, a, d]);
       } else {
-        await this._write([slot & 1, 0x20, d, 0x80]);
+        await this._write([slot & 1, 0x20, d]);
       }
     } else if (this.type === "SPFM") {
       if (port != null && a != null) {
-        await this._write([((slot & 7) << 4) | (port & 3), a, d, 0x80]);
+        await this._write([((slot & 7) << 4) | (port & 3), a, d]);
       } else {
         // Not supported
       }
     }
+  }
+
+  async writeRegs(slot: number, cmds: { port: number | null; a: number | null; d: number }[], writeWait: number = 0) {
+    const data = [];
+    for (const cmd of cmds) {
+      if (this.type === "SPFM_Light") {
+        if (cmd.port != null && cmd.a != null) {
+          data.push(slot & 1);
+          data.push((cmd.port & 7) << 1);
+          data.push(cmd.a);
+          data.push(cmd.d);
+        } else {
+          data.push(slot & 1);
+          data.push(0x20);
+          data.push(cmd.d);
+        }
+        for (let i = 0; i < writeWait; i++) {
+          data.push(0x80);
+        }
+      } else if (this.type === "SPFM") {
+        if (cmd.port != null && cmd.a != null) {
+          data.push((slot & 7) << 4);
+          data.push(cmd.port & 3);
+          data.push(cmd.a);
+          data.push(cmd.d);
+        }
+      }
+    }
+    await this._write(data);
   }
 }
