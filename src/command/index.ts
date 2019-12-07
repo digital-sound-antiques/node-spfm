@@ -32,7 +32,8 @@ const sections = [
     content: [
       { name: "play", summary: "Play music files." },
       { name: "devices", summary: "Show connected devices." },
-      { name: "config", summary: "Interactive configuration." }
+      { name: "config", summary: "Interactive configuration." },
+      { name: "version", summary: "Show version of this commmand." }
     ]
   },
   {
@@ -54,10 +55,13 @@ export default async function main(argv: string[]) {
       await doPlayCommand(args);
     } else if (mainOptions.command === "config") {
       await doConfigCommand(args);
+    } else if (mainOptions.command === "version") {
+      var json = require("../../package.json");
+      console.info(json.version);
     } else if (mainOptions.command === "help") {
-      console.log(usage);
+      console.info(usage);
     } else {
-      console.log(usage);
+      console.info(usage);
     }
   } catch (e) {
     console.error(e.message);
