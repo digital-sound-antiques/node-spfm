@@ -10,7 +10,6 @@ import KSSPlayer from "./player/kss-player";
 import { KSS } from "libkss-js";
 import Player from "./player/player";
 import SPFMModule from "./spfm-module";
-import { fileURLToPath } from "url";
 
 async function stdoutSync(message: string) {
   return new Promise((resolve, reject) => {

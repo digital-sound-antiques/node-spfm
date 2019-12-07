@@ -19,11 +19,8 @@ Playlist File: ${file}
   }
   return `SPFM Player
 -----------
-  `;
-}
 
-function getPlayListRowString(file: string) {
-  return `Playlist File: ${file}`;
+`;
 }
 
 function getGaugeString(current: number, total: number, width: number) {
