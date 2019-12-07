@@ -288,7 +288,7 @@ export default class VGMPlayer implements Player<VGM> {
   }
 
   async _processStartStream(cmd: VGMStartStreamCommand) {
-    if (cmd.streamId === 0) {
+    if (cmd.streamId === 0 && this._ym2612_dac_info) {
       const fragment = this._ym2612_dac_info!.findFragment(this._index, cmd.offset);
       if (fragment) {
         const { offset, freq, size } = fragment;
