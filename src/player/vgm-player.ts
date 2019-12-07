@@ -8,11 +8,12 @@ import {
   VGMWriteDataCommand,
   VGMSeekPCMCommand,
   VGMWrite2ACommand,
-  VGMEndCommand
+  VGMEndCommand,
+  VGMStartStreamCommand,
 } from "vgm-parser";
 import AccurateSleeper, { processNodeEventLoop } from "./sleeper";
 import Player from "./player";
-import YM2612DACAnalyzer, { ADPCMFragment, YM2612DACAnalyzerResult } from "./ym2612-dac-analyzer";
+import YM2612DACAnalyzer, { YM2612DACAnalyzerResult } from "./ym2612-dac-analyzer";
 
 type VGMPlayerOptions = {
   ym2612DACEmulationMode?: string;
@@ -116,32 +117,44 @@ export default class VGMPlayer implements Player<VGM> {
     return this._mapper.writeReg(chip, index, port, addr, data);
   }
 
+  async _ym2612_adpcm_keyOn(offset: number, freq: number, size: number = -1) {
+    const mod = this._mapper.getModule("ym2612", 0);
+    if (mod && mod.rawType === "ym2608") {
+      const spfm = mod.spfm;
+      const start = offset >> 2;
+      const stop = size < 0 ? 0xffff : Math.min(0xffff, (offset + size - 1) >> 2);
+      const delta = Math.min(0xffff, Math.round((0x10000 * freq) / (mod.rawClock / 2 / 72)));
+      await spfm.writeRegs(mod.slot, [
+        { port: 1, a: 0x00, d: 0x01 },
+        { port: 1, a: 0x00, d: 0x20 },
+        { port: 1, a: 0x01, d: this._ym2612_pcm_lr },
+        { port: 1, a: 0x02, d: start & 0xff }, // start(L)
+        { port: 1, a: 0x03, d: start >> 8 }, // start(H)
+        { port: 1, a: 0x04, d: stop & 0xff }, // stop(L)
+        { port: 1, a: 0x05, d: stop >> 8 }, // stop(H)
+        { port: 1, a: 0x0c, d: 0xff }, // limit(L)
+        { port: 1, a: 0x0d, d: 0xff }, // limit(H)
+        { port: 1, a: 0x09, d: delta & 0xff }, // delta(L)
+        { port: 1, a: 0x0a, d: delta >> 8 }, // delta(H)
+        { port: 1, a: 0x0b, d: 0x50 }, // vol
+        { port: 1, a: 0x00, d: 0xa0 } // key-on
+      ]);
+    }
+  }
+
+  async _ym2612_adpcm_keyOff() {
+    const mod = this._mapper.getModule("ym2612", 0);
+    if (mod && mod.rawType === "ym2608") {
+      const spfm = mod.spfm;
+      await spfm.writeReg(mod.slot, 1, 0x00, 0xa1);
+    }
+  }
+
   async _writeYm2612_2a_adpcm() {
     const fragment = this._ym2612_dac_info!.findFragment(this._index, this._ym2612_pcm_offset);
     if (fragment) {
-      const { offset, size, freq } = fragment;
-      const mod = this._mapper.getModule("ym2612", 0);
-      if (mod && mod.rawType === "ym2608") {
-        const spfm = mod.spfm;
-        const start = offset >> 2;
-        const stop = (offset + size - 1) >> 2;
-        const delta = Math.min(0xffff, Math.round((0x10000 * freq) / (mod.rawClock / 2 / 72)));
-        await spfm.writeRegs(mod.slot, [
-          { port: 1, a: 0x00, d: 0x01 },
-          { port: 1, a: 0x00, d: 0x20 },
-          { port: 1, a: 0x01, d: this._ym2612_pcm_lr },
-          { port: 1, a: 0x02, d: start & 0xff }, // start(L)
-          { port: 1, a: 0x03, d: start >> 8 }, // start(H)
-          { port: 1, a: 0x04, d: stop & 0xff }, // stop(L)
-          { port: 1, a: 0x05, d: stop >> 8 }, // stop(H)
-          { port: 1, a: 0x0c, d: 0xff }, // limit(L)
-          { port: 1, a: 0x0d, d: 0xff }, // limit(H)
-          { port: 1, a: 0x09, d: delta & 0xff }, // delta(L)
-          { port: 1, a: 0x0a, d: delta >> 8 }, // delta(H)
-          { port: 1, a: 0x0b, d: 0x50 }, // vol
-          { port: 1, a: 0x00, d: 0xa0 } // key-on
-        ]);
-      }
+      const { offset, freq, size } = fragment;
+      await this._ym2612_adpcm_keyOn(offset, freq, size);
     }
   }
 
@@ -274,6 +287,16 @@ export default class VGMPlayer implements Player<VGM> {
     }
   }
 
+  async _processStartStream(cmd: VGMStartStreamCommand) {
+    if (cmd.streamId === 0) {
+      const fragment = this._ym2612_dac_info!.findFragment(this._index, cmd.offset);
+      if (fragment) {
+        const { offset, freq, size } = fragment;
+        return this._ym2612_adpcm_keyOn(offset, freq, size);
+      }
+    }
+  }
+
   async _playLoop() {
     const cmd = parseVGMCommand(this._vgmCommands!, this._index);
     let nextIndex = this._index + cmd.size;
@@ -287,6 +310,8 @@ export default class VGMPlayer implements Player<VGM> {
       this._ym2612_pcm_offset = cmd.offset;
     } else if (cmd instanceof VGMWrite2ACommand) {
       await this._writeYm2612_2a(cmd.count);
+    } else if (cmd instanceof VGMStartStreamCommand) {
+      await this._processStartStream(cmd);
     } else if (cmd instanceof VGMEndCommand) {
       if (this._vgm!.offsets.loop) {
         nextIndex = this._vgm!.offsets.loop - this._vgm!.offsets.data;

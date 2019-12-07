@@ -28,7 +28,7 @@
     "libkss-js": "^0.13.0",
     "microtime": "^3.0.0",
     "serialport": "^8.0.5",
-    "vgm-parser": "^0.3.0"
+    "vgm-parser": "^0.4.0"
   },
   "devDependencies": {
     "@types/command-line-usage": "^5.0.1",

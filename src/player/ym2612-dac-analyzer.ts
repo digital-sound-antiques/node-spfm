@@ -5,7 +5,13 @@ import {
   VGMWaitCommand,
   VGMSeekPCMCommand,
   VGMWrite2ACommand,
-  VGMEndCommand
+  VGMEndCommand,
+  VGMStartStreamCommand,
+  VGMSetupStreamCommand,
+  VGMSetStreamDataCommand,
+  VGMSetStreamFrequencyCommand,
+  VGMStartStreamFastCommand,
+  VGMStopStreamCommand
 } from "vgm-parser";
 const _pad = (s: number) => ("0000000" + s).slice(-8);
 
@@ -124,7 +130,6 @@ export default class YM2612DACAnalyzer {
     this._pcmKeyOnIndex = -1;
     this._lastTime2AWritten = -1;
     this._waitTimeArray = [];
-    this._index += 4;
   }
 
   async _writeYm2612_2a(n: number) {
@@ -157,6 +162,49 @@ export default class YM2612DACAnalyzer {
     }
   }
 
+  _streamFrequency = 0;
+  _streamCommandSize = 1;
+  _streamDataBankId = -1;
+  _useDACStreamControl = false;
+
+  _processSetupStream(cmd: VGMSetupStreamCommand) {
+    if (cmd.streamId === 0 && cmd.type === 0x02) {
+      this._useDACStreamControl = true;
+    }
+  }
+
+  _processSetStreamData(cmd: VGMSetStreamDataCommand) {
+    if (cmd.streamId === 0) {
+      this._streamDataBankId = cmd.dataBankId;
+    }
+  }
+
+  _processSetStreamFrequency(cmd: VGMSetStreamFrequencyCommand) {
+    if (cmd.streamId === 0 && this._streamDataBankId === 0) {
+      this._streamFrequency = cmd.frequency;
+    }
+  }
+
+  _processStartStream(cmd: VGMStartStreamCommand) {
+    if (cmd.streamId === 0 && this._streamDataBankId === 0) {
+      let length = 0;
+      if (cmd.lengthMode === 1) {
+        length = cmd.dataLength * this._streamCommandSize;
+      } else if (cmd.lengthMode === 2) {
+        length = (44100 * cmd.dataLength) / 1000;
+      }
+      if (0 < length) {
+        const fragment = new PCMFragment(
+          this._index,
+          cmd.offset,
+          length,
+          Math.round((length / this._streamFrequency) * 44100)
+        );
+        this._fragments.push(fragment);
+      }
+    }
+  }
+
   analyze(): YM2612DACAnalyzerResult {
     this._index = 0;
     this._pcmStart = 0;
@@ -177,6 +225,14 @@ export default class YM2612DACAnalyzer {
         this._seekPcmDataBank(cmd.offset);
       } else if (cmd instanceof VGMWrite2ACommand) {
         this._writeYm2612_2a(cmd.count);
+      } else if (cmd instanceof VGMSetupStreamCommand) {
+        this._processSetupStream(cmd);
+      } else if (cmd instanceof VGMSetStreamDataCommand) {
+        this._processSetStreamData(cmd);
+      } else if (cmd instanceof VGMSetStreamFrequencyCommand) {
+        this._processSetStreamFrequency(cmd);
+      } else if (cmd instanceof VGMStartStreamCommand) {
+        this._processStartStream(cmd);
       } else if (cmd instanceof VGMEndCommand) {
         this._updatePcmDataUnit();
         break;
@@ -187,7 +243,7 @@ export default class YM2612DACAnalyzer {
       this._index = nextIndex;
     }
 
-    return new YM2612DACAnalyzerResult(this._pcm, this._fragments, this._options);
+    return new YM2612DACAnalyzerResult(this._pcm, this._fragments, this._useDACStreamControl, this._options);
   }
 }
 
@@ -286,13 +342,23 @@ export class YM2612DACAnalyzerResult {
   offsetToAdpcmMap = new Map<number, ADPCMFragment>();
   adpcmData = new Uint8Array(256 * 1024);
 
-  constructor(pcmData: Uint8Array, fragments: Array<PCMFragment>, options: YM2612DACAnalyzerOptions) {
-    if (options.frequencyAnalysis) {
-      fixOffsetOfFragments(fragments);
-    }
-    let optimizedFragments = getOptimizedFragments(fragments);
-    if (options.overlapAnalysis) {
-      optimizedFragments = divideOverlaps(optimizedFragments);
+  constructor(
+    pcmData: Uint8Array,
+    fragments: Array<PCMFragment>,
+    useDACStreamControl: boolean,
+    options: YM2612DACAnalyzerOptions
+  ) {
+    let optimizedFragments;
+    if (!useDACStreamControl) {
+      if (options.frequencyAnalysis) {
+        fixOffsetOfFragments(fragments);
+      }
+      optimizedFragments = getOptimizedFragments(fragments);
+      if (options.overlapAnalysis) {
+        optimizedFragments = divideOverlaps(optimizedFragments);
+      }
+    } else {
+      optimizedFragments = fragments;
     }
     const indexToFragmentMap = new Map<number, PCMFragment>();
     const offsetToLargestFragmentMap = new Map<number, PCMFragment>();
