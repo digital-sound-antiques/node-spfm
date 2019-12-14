@@ -53,7 +53,9 @@ export class YM2151ClockFilter implements RegisterFilter {
         const nfrq = Math.min(0x1f, Math.round((data.d & 0x1f) * this._ratio));
         return [{ port: data.port, a: data.a, d: (data.d & 0xe0) | nfrq }];
       } else if (data.a === 0x18) {
-        const lfrq = Math.min(0xff, Math.round(data.d / this._ratio));
+        const counter_add = 0x10 + (data.d & 0xf);
+        const new_counter_add = Math.max(0x10, Math.min(0x1f, counter_add * this._ratio));
+        const lfrq = (data.d & 0xf0) | (new_counter_add - 0x10);
         return [{ port: data.port, a: data.a, d: lfrq }];
       }
     }
