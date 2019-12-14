@@ -1,6 +1,6 @@
 {
   "name": "node-spfm",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "main": "index.js",
   "author": "Mitsutaka Okazaki",
   "license": "MIT",
