@@ -358,6 +358,16 @@ export default class SPFMMapper {
     for (const mods of Object.values(this._spfmModuleMap)) {
       for (const mod of mods) {
         switch (mod.type) {
+          case "ym2151":
+            /* sl=15,rr=15 */
+            for (let i = 0xe0; i < 0xff; i++) {
+              await mod.writeReg(0, i, 0xff);
+            }
+            /* fm key-off */
+            for (let i = 0; i < 8; i++) {
+              await mod.writeReg(0, 0x08, i);
+            }
+            break;
           case "ym2608":
             /* ssg mute */
             await mod.writeReg(0, 6, 0x3f);
