@@ -7,6 +7,7 @@ export class YM2151ClockFilter implements RegisterFilter {
   _ratio: number;
   _diff: number;
   _regs = new Uint8Array(256);
+  _outRegs = new Uint8Array(256);
 
   constructor(inClock: number, outClock: number) {
     this._ratio = inClock / outClock;
@@ -36,16 +37,24 @@ export class YM2151ClockFilter implements RegisterFilter {
             newKey = (12 << 8) - 1;
           }
         }
-        return [
-          { port: data.port, a: 0x30 + ch, d: newKey & 0xfc },
-          { port: data.port, a: 0x28 + ch, d: (octave << 4) | keyIndexToCode[newKey >> 8] }
-        ];
+        const result = [];
+        const okc = (octave << 4) | keyIndexToCode[newKey >> 8];
+        if (okc != this._outRegs[0x28 + ch]) {
+          result.push({ port: data.port, a: 0x28 + ch, d: okc });
+          this._outRegs[0x28 + ch] = okc;
+        }
+        const kf = newKey & 0xfc;
+        if (kf != this._outRegs[0x30 + kf]) {
+          result.push({ port: data.port, a: 0x30 + ch, d: newKey & 0xfc });
+          this._outRegs[0x30 + ch] = kf;
+        }
+        return result;
       } else if (data.a === 0x0f) {
         const nfrq = Math.min(0x1f, Math.round((data.d & 0x1f) * this._ratio));
         return [{ port: data.port, a: data.a, d: (data.d & 0xe0) | nfrq }];
       } else if (data.a === 0x18) {
-        const lfrq = Math.min(0xff, Math.round(data.d * this._ratio));
-        return [{ port: data.port, a: data.a, d: (data.d & 0xe0) | lfrq }];
+        const lfrq = Math.min(0xff, Math.round(data.d / this._ratio));
+        return [{ port: data.port, a: data.a, d: lfrq }];
       }
     }
     return [data];
