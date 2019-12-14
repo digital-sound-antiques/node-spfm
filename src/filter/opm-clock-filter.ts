@@ -10,7 +10,7 @@ export class YM2151ClockFilter implements RegisterFilter {
 
   constructor(inClock: number, outClock: number) {
     this._ratio = inClock / outClock;
-    this._diff = Math.round(12 * Math.log2(1.0 / this._ratio) * 64);
+    this._diff = Math.round(12 * Math.log2(1.0 / this._ratio) * 256);
   }
   filterReg(context: any, data: RegisterData): RegisterData[] {
     if (this._ratio !== 1.0 && data.a != null) {
@@ -18,27 +18,27 @@ export class YM2151ClockFilter implements RegisterFilter {
       if ((0x28 <= data.a && data.a <= 0x2f) || (0x30 <= data.a && data.a <= 0x37)) {
         const ch = data.a - (data.a < 0x30 ? 0x28 : 0x30);
         const orgKeyIndex = keyCodeToIndex[this._regs[0x28 + ch] & 0xf];
-        const orgKey = (orgKeyIndex << 6) | (this._regs[0x28 + ch] >> 2);
+        const orgKey = (orgKeyIndex << 8) | this._regs[0x28 + ch];
         let octave = (this._regs[0x28 + ch] >> 4) & 0x7;
         let newKey = orgKey + this._diff;
         if (newKey < 0) {
           if (0 < octave) {
             octave--;
-            newKey += 12 << 6;
+            newKey += 12 << 8;
           } else {
             newKey = 0;
           }
-        } else if (newKey >= 12 << 6) {
+        } else if (newKey >= 12 << 8) {
           if (octave < 7) {
             octave++;
-            newKey -= 12 << 6;
+            newKey -= 12 << 8;
           } else {
-            newKey = (12 << 6) - 1;
+            newKey = (12 << 8) - 1;
           }
         }
         return [
-          { port: data.port, a: 0x30 + ch, d: (newKey & 0x3f) << 2 },
-          { port: data.port, a: 0x28 + ch, d: (octave << 4) | keyIndexToCode[newKey >> 6] }
+          { port: data.port, a: 0x30 + ch, d: newKey & 0xfc },
+          { port: data.port, a: 0x28 + ch, d: (octave << 4) | keyIndexToCode[newKey >> 8] }
         ];
       } else if (data.a === 0x0f) {
         const nfrq = Math.min(0x1f, Math.round((data.d & 0x1f) * this._ratio));
