@@ -25,7 +25,7 @@ export class YM2151ClockFilter implements RegisterFilter {
 
       if (!this._initialized) {
         const lfrq = Math.max(0, Math.min(255, this._lfoDiff));
-        result.push({ port: data.port, a: data.a, d: lfrq });
+        result.push({ port: data.port, a: 0x18, d: lfrq });
         this._initialized = true;
       }
 
@@ -33,7 +33,7 @@ export class YM2151ClockFilter implements RegisterFilter {
       if ((0x28 <= data.a && data.a <= 0x2f) || (0x30 <= data.a && data.a <= 0x37)) {
         const ch = data.a - (data.a < 0x30 ? 0x28 : 0x30);
         const orgKeyIndex = keyCodeToIndex[this._regs[0x28 + ch] & 0xf];
-        const orgKey = (orgKeyIndex << 8) | this._regs[0x28 + ch];
+        const orgKey = (orgKeyIndex << 8) | (this._regs[0x30 + ch] & 0xfc);
         let octave = (this._regs[0x28 + ch] >> 4) & 0x7;
         let newKey = orgKey + this._keyDiff;
         if (newKey < 0) {
@@ -52,13 +52,13 @@ export class YM2151ClockFilter implements RegisterFilter {
           }
         }
         const okc = (octave << 4) | keyIndexToCode[newKey >> 8];
-        if (okc != this._outRegs[0x28 + ch]) {
+        if (this._outRegs[0x28 + ch] != okc) {
           result.push({ port: data.port, a: 0x28 + ch, d: okc });
           this._outRegs[0x28 + ch] = okc;
         }
         const kf = newKey & 0xfc;
-        if (kf != this._outRegs[0x30 + kf]) {
-          result.push({ port: data.port, a: 0x30 + ch, d: newKey & 0xfc });
+        if (this._outRegs[0x30 + ch] != kf) {
+          result.push({ port: data.port, a: 0x30 + ch, d: kf });
           this._outRegs[0x30 + ch] = kf;
         }
         return result;
