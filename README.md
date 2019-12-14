@@ -30,6 +30,7 @@ This program works also on Windows 10 with proper console (ex. bash console in V
 - YM2413 (OPLL)   
 - YM3526 (OPL)    
 - YM3812 (OPL2)  
+- YM2151 (OPM)
 
 # Install
 
