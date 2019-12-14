@@ -367,6 +367,10 @@ export default class SPFMMapper {
             for (let i = 0; i < 8; i++) {
               await mod.writeReg(0, 0x08, i);
             }
+            /* full reset */
+            for (let i = 0; i <= 0xff; i++) {
+              await mod.writeReg(0, i, 0);
+            }
             break;
           case "ym2608":
             /* ssg mute */
