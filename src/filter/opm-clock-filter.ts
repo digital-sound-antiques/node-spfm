@@ -18,6 +18,9 @@ export class YM2151ClockFilter implements RegisterFilter {
     /* LFO_FREQ = CLOCK * POWER(2, LFRQ/16 - 32) = CLOCK' * POWER(2, LFRQ'/16 - 32) */
     /* => LFRQ' = 16 * LOG2(CLOCK/CLOCK') + LFRQ */
     this._lfoDiff = Math.round(16 * Math.log2(1.0 / this._ratio));
+    for (let i = 0; i < this._outRegs.length; i++) {
+      this._outRegs[i] = -1;
+    }
   }
   filterReg(context: any, data: RegisterData): RegisterData[] {
     if (this._ratio !== 1.0 && data.a != null) {
