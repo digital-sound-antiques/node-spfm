@@ -5,6 +5,7 @@ import { RegisterFilterBuilder } from "./filter/register-filter";
 import SPFMModule, { SPFMModuleInfo } from "./spfm-module";
 import { YM2203ClockFilter, YM2608ClockFilter, YM2612ClockFilter } from "./filter/opn-clock-filter";
 import { YM2413ClockFilter, YM3526ClockFilter } from "./filter/opl-clock-filter";
+import { YM2151ClockFilter } from "./filter/opm-clock-filter";
 import SN76489ClockFilter from "./filter/sn76489-clock-filter";
 import YM2612ToYM2608Filter from "./filter/ym2612-to-ym2608-filter";
 import SN76489ToAY8910Filter from "./filter/sn76489-to-ay8910-filter";
@@ -100,6 +101,9 @@ export function getClockConverterBuilder(type: string): RegisterFilterBuilder | 
   }
   if (type === "sn76489") {
     return (inModule, outModule) => new SN76489ClockFilter(inModule.clock, outModule.clock);
+  }
+  if (type === "ym2151") {
+    return (inModule, outModule) => new YM2151ClockFilter(inModule.clock, outModule.clock);
   }
   return null;
 }
