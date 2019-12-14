@@ -6,9 +6,19 @@ A command-line controller for [SPFM Light](http://www.pyonpyon.jp/~gasshi/fm/spf
 
 This screen shot is node-spfm running under [cool-retro-term](https://github.com/Swordfish90/cool-retro-term).
 
+# Feature
+
+- Software clock adjustment.
+- Non-obvious inter-chip conversion.
+  - Convert SN76489 vgm to YM2203 and YM2608 module.
+  - Convert YM2612 vgm to YM2608 module (DAC stream to ADPCM conversion is also supported).
+- Suppress click noise on stop.
+
 # Requirements
-- Node 10 or later environment on macOS and Linux is required. 
-- SPFM Light device.
+
+- macOS or Linux
+- Node 10 or later
+- SPFM Light and RE:Birth module
 
 This program works also on Windows 10 with proper console (ex. bash console in Visual Studio Code), however, playback speed is not stabilized.
 
@@ -25,12 +35,12 @@ This program works also on Windows 10 with proper console (ex. bash console in V
 # Supported Modules
 
 - AY-3-8910 (PSG)  
+- YM2151 (OPM)
 - YM2203 (OPN)    
 - YM2608 (OPNA)   
-- YM2413 (OPLL)   
 - YM3526 (OPL)    
 - YM3812 (OPL2)  
-- YM2151 (OPM)
+- YM2413 (OPLL)   
 
 # Install
 
