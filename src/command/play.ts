@@ -181,14 +181,18 @@ export default async function main(argv: string[]) {
     onKeyPress = (ch: any, key: any) => {
       if (key) {
         if (key.name === "n" || key.name === "pagedown") {
-          index += key.shift ? 10 : 1;
-          index = Math.min(playlist.length - 1, index);
-          child.send({ type: "goto", index });
+          if (index < playlist.length - 1) {
+            index += key.shift ? 10 : 1;
+            index = Math.min(playlist.length - 1, index);
+            child.send({ type: "goto", index });
+          }
         }
         if (key.name === "b" || key.name === "pageup") {
-          index -= key.shift ? 10 : 1;
-          index = Math.max(0, index);
-          child.send({ type: "goto", index });
+          if (0 < index) {
+            index -= key.shift ? 10 : 1;
+            index = Math.max(0, index);
+            child.send({ type: "goto", index });
+          }
         }
         if (key.name === "r") {
           child.send({ type: "reload", index });
