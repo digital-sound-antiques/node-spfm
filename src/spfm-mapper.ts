@@ -186,16 +186,20 @@ export function getAvailableCompatibleModules(
   return exacts.concat(adjusts);
 }
 
-function findModule(availableModules: SPFMModuleInfo[], type: string, clock: number, fuzzyMatch: boolean = false) {
+function findModule(
+  availableModules: SPFMModuleInfo[],
+  type: string,
+  clock: number,
+  matchMode: "exact" | "fuzzy" | "convert"
+) {
   return availableModules.find(m => {
-    if (m.clockConverter == null) {
-      if (fuzzyMatch) {
-        if (!fuzzyClockMatch(m.clock, clock)) return false;
-      } else {
-        if (m.clock !== clock) return false;
-      }
-    }
-    return m.type === type;
+    if (matchMode === "exact") {
+      return m.type === type && m.clock === clock;
+    } 
+    if (matchMode === "fuzzy") {
+      return m.type === type && fuzzyClockMatch(m.clock, clock);
+    } 
+    return m.type === type && m.clockConverter != null;
   });
 }
 
@@ -213,10 +217,12 @@ function findTargets(
 
   for (const m of modulesToOpen) {
     const target =
-      findModule(directs, m.type, m.clock) ||
-      findModule(directs, m.type, m.clock, true) ||
-      findModule(compats, m.type, m.clock) ||
-      findModule(compats, m.type, m.clock, true);
+      findModule(directs, m.type, m.clock, "exact") ||
+      findModule(directs, m.type, m.clock, "fuzzy") ||
+      findModule(directs, m.type, m.clock, "convert") ||
+      findModule(compats, m.type, m.clock, "exact") ||
+      findModule(compats, m.type, m.clock, "fuzzy") ||
+      findModule(compats, m.type, m.clock, "convert");
     if (target != null) {
       const port = ports.find(e => e.serialNumber === target.deviceId);
       if (port != null) {
