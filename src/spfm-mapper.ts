@@ -195,10 +195,10 @@ function findModule(
   return availableModules.find(m => {
     if (matchMode === "exact") {
       return m.type === type && m.clock === clock;
-    } 
+    }
     if (matchMode === "fuzzy") {
       return m.type === type && fuzzyClockMatch(m.clock, clock);
-    } 
+    }
     return m.type === type && m.clockConverter != null;
   });
 }
