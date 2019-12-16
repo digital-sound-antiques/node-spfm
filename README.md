@@ -8,8 +8,8 @@ This screen shot is node-spfm running under [cool-retro-term](https://github.com
 
 # Feature
 
-- Software clock adjustment.
-- Non-obvious inter-chip conversion.
+- Software clock adjustment. Frequency of tones will be automatically adjusted according to the clock frequency. 
+- Deep inter-chip conversion. For example,
   - Convert SN76489 vgm to YM2203 and YM2608 module.
   - Convert YM2612 vgm to YM2608 module (DAC stream to ADPCM conversion is also supported).
 - Suppress click noise on stop.
