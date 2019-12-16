@@ -16,6 +16,8 @@
   ],
   "scripts": {
     "tslint-check": "tslint-config-prettier-check ./tslint.json",
+    "prepare": "npm run clean && npm run build",
+    "clean": "rm-cli -ss -r dist",
     "build": "tsc"
   },
   "dependencies": {
