@@ -14,6 +14,7 @@ import SerialPort from "serialport";
 import { OKIM6258ToYM2608Filter } from "./filter/okim6258-to-ym2608-filter";
 import { OKIM6258ClockFilter } from "./filter/okim6258-clock-filter";
 import YM2413ToYM2608Filter from "./filter/ym2413-to-ym2608-filter";
+import YM2612ToYM2413Filter from "./filter/ym2612-to-ym2413-filter";
 
 export type CompatSpec = {
   type: string;
@@ -39,6 +40,8 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
         { type: "ym3526", clockDiv: 1 },
         { type: "y8950", clockDiv: 1 }
       ];
+    case "ym2413":
+      return [{ type: "ym2612", clockDiv: 0.5, experiment: true }];
     case "ym2203":
       return [
         { type: "sn76489", clockDiv: 1 },
@@ -83,6 +86,9 @@ export async function getAvailableDevices(
 export function getTypeConverterBuilder(inType: string, outType: string): RegisterFilterBuilder | null {
   if (inType === "ym2612" && outType === "ym2608") {
     return () => new YM2612ToYM2608Filter();
+  }
+  if (inType === "ym2612" && outType === "ym2413") {
+    return () => new YM2612ToYM2413Filter();
   }
   if (inType === "ym2413" && outType === "ym2608") {
     return () => new YM2413ToYM2608Filter();

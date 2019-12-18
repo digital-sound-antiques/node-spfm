@@ -11,6 +11,8 @@ import { KSS } from "libkss-js";
 import Player from "./player/player";
 import SPFMModule from "./spfm-module";
 
+const debug = false;
+
 const defaultModulePriority = [
   "ym2151",
   "ym2612",
@@ -297,6 +299,10 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
     sendMessage({ type: "stop", index });
     stdoutSync("\nPlaying finished.\n");
   } catch (e) {
+    if (debug) {
+      console.log(e);
+      throw e;
+    }
     sendMessage({ type: "error", message: e.message });
     if (options.files.length === 1) {
       throw e;

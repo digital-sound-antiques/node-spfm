@@ -86,3 +86,29 @@ export function createOPNVoice(): OPNVoice {
     slots: [emptySlot, emptySlot, emptySlot, emptySlot]
   };
 }
+
+export function toOPNVoice(d: ArrayLike<number>): OPNVoice {
+  const slots = [];
+  for (let i = 0; i < 4; i++) {
+    slots[i] = {
+      dt: (d[0 + i] >> 4) & 7,
+      ml: d[0 + i] & 15,
+      tl: d[4 + i] & 127,
+      ks: (d[8 + i] >> 6) & 3,
+      ar: d[8 + i] & 31,
+      am: (d[12 + i] >> 7) & 1,
+      dr: d[12 + i] & 31,
+      sr: d[16 + i] & 31,
+      sl: (d[20 + i] >> 4) & 15,
+      rr: d[20 + i] & 15,
+      ssg: d[24 + i] & 15
+    };
+  }
+  return {
+    fb: (d[28] >> 3) & 7,
+    con: d[28] & 7,
+    ams: (d[29] >> 4) & 3,
+    pms: d[29] & 7,
+    slots
+  };
+}
