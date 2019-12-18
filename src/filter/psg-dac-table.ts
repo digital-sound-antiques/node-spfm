@@ -1,4 +1,4 @@
-const psgDACTable: { [key: number]: number[] } = {
+const PSGDACTable: { [key: number]: number[] } = {
   //V: [R8, R9, R10]
   765: [15, 15, 15],
   764: [15, 15, 15],
@@ -768,4 +768,4 @@ const psgDACTable: { [key: number]: number[] } = {
   0: [0, 0, 0]
 };
 
-export default psgDACTable;
+export default PSGDACTable;

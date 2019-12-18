@@ -38,6 +38,14 @@ export default class SPFMModule {
     this._writeWait = this.moduleInfo.rawType === "ym2413" ? 1 : 0;
   }
 
+  async initialize() {
+    for (const filter of this._filters) {
+      if ((filter as any).initialize != null) {
+        await (filter as any).initialize(this);
+      }
+    }
+  }
+
   get isCompatible() {
     return this.type !== this.rawType;
   }

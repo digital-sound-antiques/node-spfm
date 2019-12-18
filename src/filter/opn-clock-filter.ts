@@ -3,20 +3,30 @@ import AY8910ClockFilter from "./ay8910-clock-filter";
 
 abstract class OPNClockFilterBase implements RegisterFilter {
   _ratio: number;
-  _regs = new Uint8Array(256);
+  _regs = [new Uint8Array(256), new Uint8Array(256)];
   constructor(inClock: number, outClock: number) {
     this._ratio = inClock / outClock;
   }
   filterReg(context: any, data: RegisterData): RegisterData[] {
-    if (this._ratio !== 1.0 && data.a != null) {
+    if (this._ratio !== 1.0 && data.port != null && data.a != null) {
+      const regs = this._regs[data.port];
+      regs[data.a] = data.d;
       if (0xa0 <= data.a && data.a < 0xb0) {
-        this._regs[data.a] = data.d;
-        const al = data.a & 0xfb;
-        const ah = (data.a & 0xfb) + 4;
-        const fnum = ((this._regs[ah] & 7) << 8) | this._regs[al];
-        const new_fnum = Math.min(0x7ff, fnum / this._ratio);
+        const al = 0xa0 + (data.a & 3);
+        const ah = al + 4;
+        const fnum = ((regs[ah] & 7) << 8) | regs[al];
+        let new_fnum = Math.min(0x7ff, Math.round(fnum / this._ratio));
+        let new_blk = (regs[ah] >> 3) & 7;
+        while (new_fnum > 0x7ff) {
+          new_fnum >>= 1;
+          new_blk++;
+        }
+        if (new_blk > 7) {
+          new_blk = 7;
+          new_fnum = 0x7ff;
+        }
         const dl = new_fnum & 0xff;
-        const dh = (this._regs[ah] & 0xf8) | (new_fnum >> 8);
+        const dh = (new_blk << 3) | (new_fnum >> 8);
         return [
           { port: data.port, a: ah, d: dh },
           { port: data.port, a: al, d: dl }

@@ -11,6 +11,8 @@ import YM2612ToYM2608Filter from "./filter/ym2612-to-ym2608-filter";
 import SN76489ToAY8910Filter from "./filter/sn76489-to-ay8910-filter";
 import SN76489ToYM2203Filter from "./filter/sn76489-to-ym2203-filter";
 import SerialPort from "serialport";
+import { OKIM6258ToYM2608Filter } from "./filter/okim6258-to-ym2608-filter";
+import { OKIM6258ClockFilter } from "./filter/okim6258-clock-filter";
 
 export type CompatSpec = {
   type: string;
@@ -35,6 +37,7 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
       ];
     case "ym2608":
       return [
+        { type: "okim6258", clockDiv: 1 },
         { type: "ym2612", clockDiv: 1 },
         { type: "ym2203", clockDiv: 2 },
         { type: "sn76489", clockDiv: 2 },
@@ -77,6 +80,9 @@ export function getTypeConverterBuilder(inType: string, outType: string): Regist
   if (inType === "sn76489" && (outType === "ym2203" || outType === "ym2608")) {
     return () => new SN76489ToYM2203Filter();
   }
+  if (inType === "okim6258" && outType === "ym2608") {
+    return () => new OKIM6258ToYM2608Filter();
+  }
   return null;
 }
 
@@ -104,6 +110,9 @@ export function getClockConverterBuilder(type: string): RegisterFilterBuilder | 
   }
   if (type === "ym2151") {
     return (inModule, outModule) => new YM2151ClockFilter(inModule.clock, outModule.clock);
+  }
+  if (type === "okim6258") {
+    return (inModule, outModule) => new OKIM6258ClockFilter(inModule.clock, outModule.clock);
   }
   return null;
 }
@@ -327,6 +336,7 @@ export default class SPFMMapper {
           this._spfmMap[port.path] = spfm;
         }
         const mod = new SPFMModule(spfm, target, target.requestedClock);
+        await mod.initialize();
         if (this._spfmModuleMap[target.type] == null) {
           this._spfmModuleMap[target.type] = [mod];
         } else {

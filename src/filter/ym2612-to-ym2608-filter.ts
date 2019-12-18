@@ -1,5 +1,5 @@
 import { RegisterFilter, RegisterData } from "./register-filter";
-import psgDACTable from "./psg-dac-table";
+import PSGDACTable from "./psg-dac-table";
 
 const ssgPcm = true;
 
@@ -24,7 +24,7 @@ export default class YM2612ToYM2608Filter implements RegisterFilter {
       if (data.a == 0x2a) {
         if (ssgPcm && this._div % 4 != 0) {
           const v = Math.min(765, Math.round(data.d * 4));
-          const r = psgDACTable[v];
+          const r = PSGDACTable[v];
           result.push({ port: 0, a: 0x08, d: r[0] });
           result.push({ port: 0, a: 0x09, d: r[1] });
           result.push({ port: 0, a: 0x0a, d: r[2] });

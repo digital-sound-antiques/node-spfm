@@ -1,4 +1,4 @@
-import { ADPCM_encode } from "./adpcm-util";
+import { YM2608_ADPCM_encode } from "./adpcm-util";
 import {
   parseVGMCommand,
   VGMDataBlockCommand,
@@ -374,7 +374,7 @@ export class YM2612DACAnalyzerResult {
     const PCMToADPCMOffsetMap = new Map<number, number>();
     offsetToLargestFragmentMap.forEach(v => {
       PCMToADPCMOffsetMap.set(v.offset, adpcmWritten);
-      const packet = ADPCM_encode(pcmData.slice(v.offset, v.offset + v.size));
+      const packet = YM2608_ADPCM_encode(pcmData.slice(v.offset, v.offset + v.size));
       this.adpcmData.set(packet, adpcmWritten);
       adpcmWritten += packet.length;
     });

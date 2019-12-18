@@ -10,10 +10,18 @@ import {
   VGMWrite2ACommand,
   VGMEndCommand,
   VGMStartStreamCommand,
+  VGMPCMRAMWriteCommand,
+  VGMStartStreamFastCommand,
+  VGMSetStreamDataCommand,
+  VGMSetupStreamCommand,
+  VGMSetStreamFrequencyCommand,
+  VGMStopStreamCommand
 } from "vgm-parser";
 import AccurateSleeper, { processNodeEventLoop } from "./sleeper";
 import Player from "./player";
 import YM2612DACAnalyzer, { YM2612DACAnalyzerResult } from "./ym2612-dac-analyzer";
+import { OKIM6258_ADPCM_decode, YM2608_ADPCM_encode } from "./adpcm-util";
+import { YM2608RAMWrite } from "./ym2608-ram-write";
 
 type VGMPlayerOptions = {
   ym2612DACEmulationMode?: string;
@@ -31,12 +39,25 @@ export default class VGMPlayer implements Player<VGM> {
   _speedRatio = 1.0;
   _loop = 2;
   _options: VGMPlayerOptions;
+
   _dac2ssg = false;
   _dac2adpcm = false;
   _ym2612_pcm_lr = 0xc0;
   _ym2612_pcm_offset = 0;
   _ym2612_pcm_data = new Uint8Array(0);
   _ym2612_dac_info: YM2612DACAnalyzerResult | null = null;
+
+  _okim6258_adpcm_lr = 0xc0;
+  _okim6258_adpcm_written = 0;
+  _okim6258_block_count = 0;
+  _okim6258_frequency = 8000;
+  _okim6258_block_map: {
+    [key: number]: {
+      blockId: number;
+      address: number;
+      size: number;
+    };
+  } = {};
 
   constructor(mapper: SPFMMapper, options: VGMPlayerOptions = {}) {
     this._mapper = mapper;
@@ -114,6 +135,25 @@ export default class VGMPlayer implements Player<VGM> {
       this._ym2612_pcm_lr = data & 0xc0;
       await this._mapper.writeReg(chip, index, 1, 1, data & 0xc0);
     }
+    if (chip === "okim6258") {
+      switch (addr!) {
+        case 0x00:
+          break;
+        case 0x01:
+          break;
+        case 0x02:
+          this._okim6258_adpcm_lr = (~data & 3) << 6;
+          break;
+        case 0x08:
+        case 0x09:
+        case 0x0a:
+          break;
+        case 0x0b:
+          break;
+        case 0x0c:
+          break;
+      }
+    }
     return this._mapper.writeReg(chip, index, port, addr, data);
   }
 
@@ -139,6 +179,40 @@ export default class VGMPlayer implements Player<VGM> {
         { port: 1, a: 0x0b, d: 0x50 }, // vol
         { port: 1, a: 0x00, d: 0xa0 } // key-on
       ]);
+    }
+  }
+
+  async _okim6258_adpcm_keyOn(offset: number, size: number = -1) {
+    const mod = this._mapper.getModule("okim6258", 0);
+    if (mod && mod.rawType === "ym2608") {
+      const freq = (this._okim6258_frequency * mod.clock) / 4000000;
+      const spfm = mod.spfm;
+      const start = offset >> 2;
+      const stop = size < 0 ? 0xffff : Math.min(0xffff, (offset + size - 1) >> 2);
+      const delta = Math.min(0xffff, Math.round((0x10000 * freq) / (mod.rawClock / 2 / 72)));
+      await spfm.writeRegs(mod.slot, [
+        { port: 1, a: 0x00, d: 0x01 },
+        { port: 1, a: 0x00, d: 0x20 },
+        { port: 1, a: 0x01, d: this._okim6258_adpcm_lr },
+        { port: 1, a: 0x02, d: start & 0xff }, // start(L)
+        { port: 1, a: 0x03, d: start >> 8 }, // start(H)
+        { port: 1, a: 0x04, d: stop & 0xff }, // stop(L)
+        { port: 1, a: 0x05, d: stop >> 8 }, // stop(H)
+        { port: 1, a: 0x0c, d: 0xff }, // limit(L)
+        { port: 1, a: 0x0d, d: 0xff }, // limit(H)
+        { port: 1, a: 0x09, d: delta & 0xff }, // delta(L)
+        { port: 1, a: 0x0a, d: delta >> 8 }, // delta(H)
+        { port: 1, a: 0x0b, d: 0xf0 }, // vol
+        { port: 1, a: 0x00, d: 0xa0 } // key-on
+      ]);
+    }
+  }
+
+  async _okim6258_adpcm_keyOff() {
+    const mod = this._mapper.getModule("okim6258", 0);
+    if (mod && mod.rawType === "ym2608") {
+      const spfm = mod.spfm;
+      await spfm.writeReg(mod.slot, 1, 0x00, 0xa1);
     }
   }
 
@@ -172,7 +246,7 @@ export default class VGMPlayer implements Player<VGM> {
     this._ym2612_pcm_offset++;
   }
 
-  async _ramWriteProgress(title: string, current: number, total: number) {
+  async _RAMWriteProgress(title: string, current: number, total: number) {
     if (process.send) {
       new Promise(resolve => {
         process.send!({ type: "ram_write", title, current, total }, () => resolve());
@@ -180,119 +254,132 @@ export default class VGMPlayer implements Player<VGM> {
     }
   }
 
-  async _YM2608RamWrite(index: number, address: number, data: Uint8Array) {
-    let start = address;
-    let stop = start + data.length - 1;
-    let limit = Math.min(stop, 0x40000 - 1);
-    const title = `YM2608 ADPCM (0x${("0000" + start.toString(16)).slice(-5)})`;
-
-    start >>= 2;
-    stop >>= 2;
-    limit >>= 2;
-
+  async _YM2608RAMWrite(index: number, address: number, data: Uint8Array) {
     const mod = this._mapper.getModule("ym2608", index);
-
-    if (mod) {
-      await mod.writeReg(1, 0x00, 0x01); //
-      await mod.writeReg(1, 0x10, 0x80); // Reset Flags
-      await mod.writeReg(1, 0x00, 0x60); // Memory Write
-      await mod.writeReg(1, 0x01, 0x00); // Memory Type
-      await mod.writeReg(1, 0x02, start & 0xff);
-      await mod.writeReg(1, 0x03, start >> 8);
-      await mod.writeReg(1, 0x04, stop & 0xff);
-      await mod.writeReg(1, 0x05, stop >> 8);
-      await mod.writeReg(1, 0x0c, limit & 0xff);
-      await mod.writeReg(1, 0x0d, limit >> 8);
-
-      for (let i = 0; i < data.length; i++) {
-        if (this._eos) break;
-        if (i % 256 === 0 || i === data.length - 1) {
-          this._ramWriteProgress(title, i, data.length); /* omit await */
-        }
-        await mod.writeReg(1, 0x08, data[i]);
-      }
-      await mod.writeReg(1, 0x00, 0x00);
-      await mod.writeReg(1, 0x10, 0x80);
+    if (mod != null) {
+      await YM2608RAMWrite(mod.spfm, mod.slot, address, data, (progress, total) => {
+        const title = `YM2608 ADPCM (0x${("0000" + address.toString(16)).slice(-5)})`;
+        this._RAMWriteProgress(title, progress, total);
+        return this._eos;
+      });
     }
   }
 
-  async _YM2612toYM2608RamWrite(index: number, address: number, data: Uint8Array) {
-    let start = address;
-    let stop = start + data.length - 1;
-    let limit = Math.min(stop, 0x40000 - 1);
-    const title = `YM2612 PCM => YM2608 ADPCM (0x${("0000" + start.toString(16)).slice(-5)})`;
-
-    start >>= 2;
-    stop >>= 2;
-    limit >>= 2;
-
+  async _YM2612toYM2608RAMWrite(index: number, address: number, data: Uint8Array) {
     const mod = this._mapper.getModule("ym2612", index);
-
     if (mod && mod.rawType === "ym2608") {
-      const spfm = mod.spfm;
-      const slot = mod.slot;
-      await spfm.writeRegs(slot, [
-        { port: 1, a: 0x00, d: 0x01 }, //
-        { port: 1, a: 0x10, d: 0x80 }, // Reset Flags
-        { port: 1, a: 0x00, d: 0x60 }, // Memory Write
-        { port: 1, a: 0x01, d: 0x00 }, // Memory Type
-        { port: 1, a: 0x02, d: start & 0xff },
-        { port: 1, a: 0x03, d: start >> 8 },
-        { port: 1, a: 0x04, d: stop & 0xff },
-        { port: 1, a: 0x05, d: stop >> 8 },
-        { port: 1, a: 0x0c, d: limit & 0xff },
-        { port: 1, a: 0x0d, d: limit >> 8 }
-      ]);
-
-      let buf = [];
-      for (let i = 0; i < data.length; i++) {
-        if (this._eos) break;
-        if (i % 256 === 0 || i === data.length - 1) {
-          this._ramWriteProgress(title, i, data.length);
-          await spfm.writeRegs(slot, buf);
-          buf = [];
-        }
-        buf.push({ port: 1, a: 0x08, d: data[i] });
-      }
-      buf.push({ port: 1, a: 0x00, d: 0x00 });
-      buf.push({ port: 1, a: 0x10, d: 0x80 });
-      await spfm.writeRegs(slot, buf);
+      await YM2608RAMWrite(mod.spfm, mod.slot, address, data, (progress, total) => {
+        const title = `YM2612 DAC to ADPCM (0x${("0000" + address.toString(16)).slice(-5)})`;
+        this._RAMWriteProgress(title, progress, total);
+        return this._eos;
+      });
     }
   }
+
   async _processYM2608DeltaPCMData(cmd: VGMDataBlockCommand) {
     const view = new DataView(cmd.blockData.buffer, cmd.blockData.byteOffset);
     const address = view.getUint32(4, true);
-    await this._YM2608RamWrite(0, address, cmd.blockData.slice(8));
+    await this._YM2608RAMWrite(0, address, cmd.blockData.slice(8));
+    await new Promise(resolve => setTimeout(() => resolve(), 50));
+    this._sleeper.reset();
   }
 
-  async _processDataBlock(cmd: VGMDataBlockCommand) {
-    if (cmd.blockType == 0x00) {
-      this._ym2612_pcm_data = cmd.blockData;
-      if (this._dac2adpcm) {
-        const mode2 = this._options.ym2612DACEmulationMode === "adpcm2";
-        this._ym2612_dac_info = new YM2612DACAnalyzer(this._data!, {
-          splitLimitInSamples: mode2 ? 32 : 735,
-          frequencyAnalysis: mode2,
-          overlapAnalysis: mode2
-        }).analyze();
-        await this._YM2612toYM2608RamWrite(0, 0, this._ym2612_dac_info.adpcmData);
-        await new Promise(resolve => setTimeout(() => resolve(), 250));
-        this._sleeper.reset();
-      }
-    }
-    if (cmd.blockType == 0x81) {
-      await this._processYM2608DeltaPCMData(cmd);
-      await new Promise(resolve => setTimeout(() => resolve(), 250));
+  async _processYM2612PCMData(cmd: VGMDataBlockCommand) {
+    this._ym2612_pcm_data = cmd.blockData;
+    if (this._dac2adpcm) {
+      const mode2 = this._options.ym2612DACEmulationMode === "adpcm2";
+      this._ym2612_dac_info = new YM2612DACAnalyzer(this._data!, {
+        splitLimitInSamples: mode2 ? 32 : 735,
+        frequencyAnalysis: mode2,
+        overlapAnalysis: mode2
+      }).analyze();
+      await this._YM2612toYM2608RAMWrite(0, 0, this._ym2612_dac_info.adpcmData);
+      await new Promise(resolve => setTimeout(() => resolve(), 50));
       this._sleeper.reset();
     }
   }
 
+  async _processOKIM6258ADPCMData(cmd: VGMDataBlockCommand) {
+    const mod = this._mapper.getModule("okim6258", 0);
+    if (mod && mod.rawType === "ym2608") {
+      const pcm = OKIM6258_ADPCM_decode(cmd.blockData);
+      const adpcm = YM2608_ADPCM_encode(pcm);
+      const address = this._okim6258_adpcm_written;
+      await YM2608RAMWrite(mod.spfm, mod.slot, address, adpcm, (progress, total) => {
+        const title = `OKIM6258 to YM2608 ADPCM (0x${("0000" + address.toString(16)).slice(-5)})`;
+        this._RAMWriteProgress(title, progress, total);
+        return this._eos;
+      });
+      this._okim6258_block_map[this._okim6258_block_count] = {
+        blockId: this._okim6258_block_count,
+        address: this._okim6258_adpcm_written,
+        size: adpcm.length
+      };
+      this._okim6258_block_count++;
+      this._okim6258_adpcm_written += adpcm.length;
+      await new Promise(resolve => setTimeout(() => resolve(), 50));
+      this._sleeper.reset();
+    }
+  }
+
+  async _processDataBlock(cmd: VGMDataBlockCommand) {
+    if (cmd.blockType === 0x00) {
+      await this._processYM2612PCMData(cmd);
+    } else if (cmd.blockType === 0x81) {
+      await this._processYM2608DeltaPCMData(cmd);
+    } else if (cmd.blockType === 0x04) {
+      await this._processOKIM6258ADPCMData(cmd);
+    }
+  }
+
+  _streamInfoMap: {
+    [key: number]: {
+      chipType: number;
+    };
+  } = {};
+
+  async _processSetupStream(cmd: VGMSetupStreamCommand) {
+    this._streamInfoMap[cmd.streamId] = {
+      chipType: cmd.type
+    };
+  }
+
   async _processStartStream(cmd: VGMStartStreamCommand) {
-    if (cmd.streamId === 0 && this._ym2612_dac_info) {
-      const fragment = this._ym2612_dac_info!.findFragment(this._index, cmd.offset);
-      if (fragment) {
-        const { offset, freq, size } = fragment;
-        return this._ym2612_adpcm_keyOn(offset, freq, size);
+    const streamInfo = this._streamInfoMap[cmd.streamId];
+    if (streamInfo != null) {
+      if (streamInfo.chipType == 2 && this._ym2612_dac_info) {
+        const fragment = this._ym2612_dac_info!.findFragment(this._index, cmd.offset);
+        if (fragment) {
+          const { offset, freq, size } = fragment;
+          return this._ym2612_adpcm_keyOn(offset, freq, size);
+        }
+      }
+    }
+  }
+
+  async _processSetStreamFrequency(cmd: VGMSetStreamFrequencyCommand) {
+    const streamInfo = this._streamInfoMap[cmd.streamId];
+    if (streamInfo != null) {
+      if (streamInfo.chipType == 23) {
+        this._okim6258_frequency = cmd.frequency;
+      }
+    }
+  }
+
+  async _processStartStreamFast(cmd: VGMStartStreamFastCommand) {
+    const streamInfo = this._streamInfoMap[cmd.streamId];
+    if (streamInfo != null) {
+      if (streamInfo.chipType == 23) {
+        const blockInfo = this._okim6258_block_map[cmd.blockId];
+        await this._okim6258_adpcm_keyOn(blockInfo.address, blockInfo.size);
+      }
+    }
+  }
+  async _processStopStream(cmd: VGMStopStreamCommand) {
+    const streamInfo = this._streamInfoMap[cmd.streamId];
+    if (streamInfo != null) {
+      if (streamInfo.chipType == 23) {
+        await this._okim6258_adpcm_keyOff();
       }
     }
   }
@@ -310,8 +397,16 @@ export default class VGMPlayer implements Player<VGM> {
       this._ym2612_pcm_offset = cmd.offset;
     } else if (cmd instanceof VGMWrite2ACommand) {
       await this._writeYm2612_2a(cmd.count);
+    } else if (cmd instanceof VGMSetupStreamCommand) {
+      await this._processSetupStream(cmd);
+    } else if (cmd instanceof VGMSetStreamFrequencyCommand) {
+      await this._processSetStreamFrequency(cmd);
     } else if (cmd instanceof VGMStartStreamCommand) {
       await this._processStartStream(cmd);
+    } else if (cmd instanceof VGMStartStreamFastCommand) {
+      await this._processStartStreamFast(cmd);
+    } else if (cmd instanceof VGMStopStreamCommand) {
+      await this._processStopStream(cmd);
     } else if (cmd instanceof VGMEndCommand) {
       if (this._vgm!.offsets.loop) {
         nextIndex = this._vgm!.offsets.loop - this._vgm!.offsets.data;
