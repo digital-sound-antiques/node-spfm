@@ -12,10 +12,10 @@ abstract class OPNClockFilterBase implements RegisterFilter {
       const regs = this._regs[data.port];
       regs[data.a] = data.d;
       if (0xa0 <= data.a && data.a < 0xb0) {
-        const al = 0xa0 + (data.a & 3);
+        const al = 0xa0 + (data.a & 3) + (data.a & 8);
         const ah = al + 4;
         const fnum = ((regs[ah] & 7) << 8) | regs[al];
-        let new_fnum = Math.min(0x7ff, Math.round(fnum / this._ratio));
+        let new_fnum = Math.round(fnum / this._ratio);
         let new_blk = (regs[ah] >> 3) & 7;
         while (new_fnum > 0x7ff) {
           new_fnum >>= 1;

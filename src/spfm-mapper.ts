@@ -13,18 +13,27 @@ import SN76489ToYM2203Filter from "./filter/sn76489-to-ym2203-filter";
 import SerialPort from "serialport";
 import { OKIM6258ToYM2608Filter } from "./filter/okim6258-to-ym2608-filter";
 import { OKIM6258ClockFilter } from "./filter/okim6258-clock-filter";
+import YM2413ToYM2608Filter from "./filter/ym2413-to-ym2608-filter";
 
 export type CompatSpec = {
   type: string;
+  group?: number;
   clockDiv: number;
+  experiment?: boolean;
 };
 
 export function getCompatibleDevices(type: string): CompatSpec[] {
   switch (type) {
     case "ym3526":
-      return [{ type: "y8950", clockDiv: 1 }];
+      return [
+        { type: "y8950", clockDiv: 1 },
+        { type: "ym3812", clockDiv: 1, experiment: true }
+      ];
     case "ym8950":
-      return [{ type: "ym3526", clockDiv: 1 }];
+      return [
+        { type: "ym3526", clockDiv: 1 },
+        { type: "ym3812", clockDiv: 1, experiment: true }
+      ];
     case "ym3812":
       return [
         { type: "ym3526", clockDiv: 1 },
@@ -37,11 +46,12 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
       ];
     case "ym2608":
       return [
-        { type: "okim6258", clockDiv: 1 },
-        { type: "ym2612", clockDiv: 1 },
-        { type: "ym2203", clockDiv: 2 },
-        { type: "sn76489", clockDiv: 2 },
-        { type: "ay8910", clockDiv: 4 }
+        { type: "ym2612", group: 1 | 2, clockDiv: 1 },
+        { type: "ym2203", group: 1 | 2, clockDiv: 2 },
+        { type: "ym2413", group: 1, clockDiv: 2, experiment: true },
+        { type: "sn76489", group: 2, clockDiv: 2 },
+        { type: "ay8910", group: 2, clockDiv: 4 },
+        { type: "okim6258", group: 4, clockDiv: 1 }
       ];
     case "ay8910":
       return [{ type: "sn76489", clockDiv: 0.5 }];
@@ -74,10 +84,16 @@ export function getTypeConverterBuilder(inType: string, outType: string): Regist
   if (inType === "ym2612" && outType === "ym2608") {
     return () => new YM2612ToYM2608Filter();
   }
+  if (inType === "ym2413" && outType === "ym2608") {
+    return () => new YM2413ToYM2608Filter();
+  }
   if (inType === "sn76489" && outType === "ay8910") {
     return () => new SN76489ToAY8910Filter();
   }
-  if (inType === "sn76489" && (outType === "ym2203" || outType === "ym2608")) {
+  if (inType === "sn76489" && outType === "ym2203") {
+    return () => new SN76489ToYM2203Filter();
+  }
+  if (inType === "sn76489" && outType === "ym2608") {
     return () => new SN76489ToYM2203Filter();
   }
   if (inType === "okim6258" && outType === "ym2608") {
@@ -174,6 +190,7 @@ export function getAvailableCompatibleModules(
           const info = {
             deviceId: device.id,
             rawType: module.type,
+            group: compat.group,
             type: compat.type,
             slot: module.slot,
             rawClock: module.clock,
@@ -214,6 +231,19 @@ function findModule(
 
 type TargetInfo = SPFMModuleInfo & { requestedClock: number };
 
+function checkModuleAlive(mod: SPFMModuleInfo, used: SPFMModuleInfo) {
+  if (mod.deviceId !== used.deviceId) {
+    return true;
+  }
+  if (mod.slot !== used.slot) {
+    return true;
+  }
+  if (mod.group != null && used.group != null && (mod.group & used.group) === 0) {
+    return true;
+  }
+  return false;
+}
+
 function findTargets(
   ports: SerialPort.PortInfo[],
   directModules: SPFMModuleInfo[],
@@ -237,8 +267,8 @@ function findTargets(
       if (port != null) {
         result.push({ requestedClock: m.clock, ...target });
         /* remove used target */
-        directs = directs.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
-        compats = compats.filter(e => e.deviceId !== target.deviceId || e.slot !== target.slot);
+        directs = directs.filter(e => checkModuleAlive(e, target));
+        compats = compats.filter(e => checkModuleAlive(e, target));
       }
     }
   }
@@ -397,7 +427,7 @@ export default class SPFMMapper {
             /* adpcm reset */
             await mod.writeReg(1, 0x00, 0x01);
             /* rhythm damp */
-            await mod.writeReg(0, 0x10, 0);
+            await mod.writeReg(0, 0x10, 0xff);
             /* sl=15,rr=15 */
             for (let i = 0x80; i < 0x90; i++) {
               await mod.writeReg(0, i, 0xff);

@@ -1,3 +1,5 @@
+import SPFMModule from "src/spfm-module";
+
 export type RegisterData = {
   port: number | null;
   a: number | null;
@@ -11,6 +13,7 @@ type ModuleConfig = {
 };
 
 export interface RegisterFilter {
+  initialize?(mod: SPFMModule): Promise<void>;
   filterReg(context: any, data: RegisterData): RegisterData[];
 }
 

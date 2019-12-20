@@ -11,6 +11,19 @@ import { KSS } from "libkss-js";
 import Player from "./player/player";
 import SPFMModule from "./spfm-module";
 
+const defaultModulePriority = [
+  "ym2151",
+  "ym2612",
+  "ym2608",
+  "ym2203",
+  "ym3812",
+  "ym3526",
+  "y8950",
+  "ym2413",
+  "ay8190",
+  "sn76489"
+];
+
 async function stdoutSync(message: string) {
   return new Promise((resolve, reject) => {
     process.stdout.write(message, err => {
@@ -166,7 +179,7 @@ function loadFromM3UItem(item: M3UItem): KSS {
 
 function loadFile(file: string, song: number): VGM | KSS {
   const buf = fs.readFileSync(file);
-  if (/\.vg(m|z)$/.test(file)) {
+  if (/\.vg(m|z)$/i.test(file)) {
     let vgmContext: Buffer;
     try {
       vgmContext = zlib.gunzipSync(buf);
@@ -252,7 +265,7 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
       ];
     }
 
-    const modulePriority = options.prioritize || [];
+    const modulePriority = options.prioritize || defaultModulePriority;
 
     const spfms = await mapper.open(modules, modulePriority);
     await sleep(250);

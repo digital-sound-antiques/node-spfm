@@ -4,6 +4,7 @@ import { RegisterFilter, RegisterFilterBuilder, RegisterData } from "./filter/re
 export type SPFMModuleInfo = {
   deviceId: string;
   rawType: string;
+  group?: number;
   type: string;
   slot: number;
   rawClock: number;

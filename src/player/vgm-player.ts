@@ -65,6 +65,10 @@ export default class VGMPlayer implements Player<VGM> {
     if (options.ym2612DACEmulationMode === "ssg") {
       this._dac2ssg = true;
     }
+    const ym2612mod = mapper.getModule("ym2612", 0);
+    if (ym2612mod && ym2612mod.rawType === "ym2413") {
+      this._dac2ssg = true;
+    }
     if (options.ym2612DACEmulationMode === "adpcm") {
       this._dac2adpcm = true;
     }
@@ -126,7 +130,7 @@ export default class VGMPlayer implements Player<VGM> {
   }
 
   async _write(cmd: VGMWriteDataCommand) {
-    const { chip, index, port, addr, data } = cmd;
+    let { chip, index, port, addr, data } = cmd;
 
     if (chip === "ym2608" && port === 1) {
       if (await this._ym2608ADPCMAddressFix(index, addr!, data)) return;
@@ -153,6 +157,10 @@ export default class VGMPlayer implements Player<VGM> {
         case 0x0c:
           break;
       }
+    }
+    if (chip === "ay8910") {
+      // make sure address is less than 0x10 in the case using ym2608 as ym2612 & ay8910 simultaneously).
+      if (0x10 <= addr!) return;
     }
     return this._mapper.writeReg(chip, index, port, addr, data);
   }
