@@ -49,7 +49,7 @@ export function getCompatibleDevices(type: string): CompatSpec[] {
         { type: "ym2612", group: 1 | 2, clockDiv: 1 },
         { type: "ym2203", group: 1 | 2, clockDiv: 2 },
         { type: "ym2413", group: 1, clockDiv: 2, experiment: true },
-        { type: "sn76489", group: 2, clockDiv: 2 },
+        { type: "sn76489", group: 1 | 2, clockDiv: 2 },
         { type: "ay8910", group: 2, clockDiv: 4 },
         { type: "okim6258", group: 4, clockDiv: 1 }
       ];
