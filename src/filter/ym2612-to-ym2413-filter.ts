@@ -106,44 +106,53 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
   }
 
   async initialize(mod: SPFMModule) {
-    const data = Array<RegisterData>();
-    /** user vocie (saw-like sound) */
-    data.push({ port: 0, a: 0, d: 0x01 });
-    data.push({ port: 0, a: 1, d: 0x01 });
-    data.push({ port: 0, a: 2, d: 0x1b });
-    data.push({ port: 0, a: 3, d: 0x07 });
-    data.push({ port: 0, a: 4, d: 0xf0 });
-    data.push({ port: 0, a: 5, d: 0xf4 });
-    data.push({ port: 0, a: 6, d: 0x00 });
-    data.push({ port: 0, a: 7, d: 0x23 });
-
-    const fnum = 8; // 1 is the highest accuracy but slower. 
-    const freq = (fnum * mod.rawClock) / 72 / (1 << 19);
-    const cycleInMillis = 1000 / freq;
+    let data: Array<RegisterData> = [];
+    // select FM 9-ch mode
     data.push({ port: 0, a: 14, d: 0 });
 
-    data.push({ port: 0, a: 37, d: 0 });
+    // make sure all channels key-off
     data.push({ port: 0, a: 38, d: 0 });
     data.push({ port: 0, a: 39, d: 0 });
     data.push({ port: 0, a: 40, d: 0 });
 
+    // select violin tone whose modulator AR is 15.
     data.push({ port: 0, a: 54, d: (1 << 4) | 15 });
     data.push({ port: 0, a: 55, d: (1 << 4) | 15 });
     data.push({ port: 0, a: 56, d: (1 << 4) | 15 });
 
+    // set f-number fnum=1 is the most accurate but need longer wait time.
+    const fnum = 8;
     data.push({ port: 0, a: 22, d: fnum });
     data.push({ port: 0, a: 23, d: fnum });
     data.push({ port: 0, a: 24, d: fnum });
+
     // start phase generator
     data.push({ port: 0, a: 38, d: 16 });
     data.push({ port: 0, a: 39, d: 16 });
     data.push({ port: 0, a: 40, d: 16 });
     await mod.spfm.writeRegs(mod.slot, data, 1);
+
+    // wait until 1/4 cycle of phase generator
+    const freq = (fnum * mod.rawClock) / 72 / (1 << 19);
+    const cycleInMillis = 1000 / freq;
     await new Promise(resolve => setTimeout(resolve, Math.round(cycleInMillis / 4)));
+
     // stop phase generator
-    await mod.spfm.writeReg(mod.slot, 0, 22, 0);
-    await mod.spfm.writeReg(mod.slot, 0, 23, 0);
-    await mod.spfm.writeReg(mod.slot, 0, 24, 0);
+    data = [];
+    data.push({ port: 0, a: 22, d: 0 });
+    data.push({ port: 0, a: 23, d: 0 });
+    data.push({ port: 0, a: 24, d: 0 });
+
+    /** setup user vocie (saw-like sound) */
+    data.push({ port: 0, a: 0, d: 0x21 });
+    data.push({ port: 0, a: 1, d: 0x01 });
+    data.push({ port: 0, a: 2, d: 0x1c });
+    data.push({ port: 0, a: 3, d: 0x07 });
+    data.push({ port: 0, a: 4, d: 0xf0 });
+    data.push({ port: 0, a: 5, d: 0xf4 });
+    data.push({ port: 0, a: 6, d: 0x00 });
+    data.push({ port: 0, a: 7, d: 0x22 });
+    await mod.spfm.writeRegs(mod.slot, data, 1);
   }
 
   _prevVS = [0, 0, 0];
@@ -240,19 +249,19 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
     const adr = data.a!;
     const regs = this._regs[data.port!];
     regs[adr] = data.d;
-
     if (data.port == 0) {
       if (adr == 0x2a) {
-        const v = Math.min(765, Math.round(data.d * 3.5));
+        const v = Math.min(765, Math.round(data.d * 3));
         this._conv.putData(v);
         if (this._div % 4 !== 0) {
           const idx = Math.max(0, Math.min(765, Math.floor(this._conv.getData())));
           const vs = YM2413DACTable[idx];
           for (let i = 0; i < 3; i++) {
-            //if (this._prevVS[i] != vs[i]) {
-            result.push({ port: 0, a: 56 - i, d: (4 << 4) | vs[i] });
+            // Note: differential writing is possible but disable here because it may make jitter on USB serial transfer.
+            // if (this._prevVS[i] != vs[i]) {
+            result.push({ port: 0, a: 56 - i, d: (8 << 4) | vs[i] });
             this._prevVS[i] = vs[i];
-            //}
+            // }
           }
         }
         this._div++;
@@ -314,6 +323,7 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
         this._outRegs[0x10 + ch] = dl;
       }
     }
+
     return result;
   }
 }
