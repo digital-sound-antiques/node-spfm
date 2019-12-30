@@ -10,9 +10,7 @@ import {
   VGMWrite2ACommand,
   VGMEndCommand,
   VGMStartStreamCommand,
-  VGMPCMRAMWriteCommand,
   VGMStartStreamFastCommand,
-  VGMSetStreamDataCommand,
   VGMSetupStreamCommand,
   VGMSetStreamFrequencyCommand,
   VGMStopStreamCommand
@@ -233,10 +231,12 @@ export default class VGMPlayer implements Player<VGM> {
   }
 
   async _writeYm2612_2a_adpcm() {
-    const fragment = this._ym2612_dac_info!.findFragment(this._index, this._ym2612_pcm_offset);
-    if (fragment) {
-      const { offset, freq, size } = fragment;
-      await this._ym2612_adpcm_keyOn(offset, freq, size);
+    if (this._ym2612_dac_info) {
+      const fragment = this._ym2612_dac_info.findFragment(this._index, this._ym2612_pcm_offset);
+      if (fragment) {
+        const { offset, freq, size } = fragment;
+        await this._ym2612_adpcm_keyOn(offset, freq, size);
+      }
     }
   }
 

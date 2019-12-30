@@ -5,7 +5,7 @@ import commandLineArgs, { CommandLineOptions } from "command-line-args";
 import zlib from "zlib";
 import SPFMMapper from "./spfm-mapper";
 import VGMPlayer from "./player/vgm-player";
-import { VGM, formatMinSec } from "vgm-parser";
+import { VGM, formatMinSec, createEmptyGD3TagObject } from "vgm-parser";
 import KSSPlayer from "./player/kss-player";
 import { KSS } from "libkss-js";
 import Player from "./player/player";
@@ -45,7 +45,7 @@ function toArrayBuffer(b: Buffer) {
 function getVGMInfoString(file: string, vgm: VGM) {
   const gain = Math.pow(2, vgm.volumeModifier / 32).toFixed(2);
   const loop = vgm.samples.loop ? `YES (${formatMinSec(vgm.samples.loop)})` : "NO";
-  const gd3 = vgm.gd3tag;
+  const gd3 = vgm.gd3tag || createEmptyGD3TagObject();
   const usedChips = vgm.usedChips.map(chip => {
     const chipObj = vgm.chips[chip];
     if (chipObj) {
