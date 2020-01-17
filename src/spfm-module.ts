@@ -36,7 +36,17 @@ export default class SPFMModule {
       this._filters.push(moduleInfo.typeConverter(moduleInfo, outModuleInfo));
     }
 
-    this._writeWait = this.moduleInfo.rawType === "ym2413" ? 1 : 0;
+    switch (this.moduleInfo.rawType) {
+      case "ym2413":
+      case "ym3812":
+      case "ym3526":
+      case "y8950":
+        this._writeWait = 1; // wait for slow chips
+        break;
+      default:
+        this._writeWait = 0;
+        break;
+    }
   }
 
   async initialize() {
