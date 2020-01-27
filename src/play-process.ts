@@ -180,13 +180,7 @@ function loadFromM3UItem(item: M3UItem): KSS {
 function loadFile(file: string, song: number): VGM | KSS {
   const buf = fs.readFileSync(file);
   if (/\.vg(m|z)$/i.test(file)) {
-    let vgmContext: Buffer;
-    try {
-      vgmContext = zlib.gunzipSync(buf);
-    } catch (e) {
-      vgmContext = buf;
-    }
-    return VGM.parse(toArrayBuffer(vgmContext));
+    return VGM.parse(toArrayBuffer(buf));
   }
   return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(file), song);
 }
