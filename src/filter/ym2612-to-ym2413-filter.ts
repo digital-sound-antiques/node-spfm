@@ -1,5 +1,5 @@
 import { RegisterFilter, RegisterData } from "./register-filter";
-import YM2413DACTable from "./ym2413-dac-table";
+import { YM2413DACTable } from "./ym2413-dac-table";
 import SPFMModule from "src/spfm-module";
 import { toOPNVoice, OPNVoice } from "./opn-voices";
 
@@ -13,80 +13,10 @@ const voices = [
 ];
 
 /** instrument data to voice and volue offset (attenuation) */
-const voiceMap: { [key: string]: { inst: number; voff: number } } = {
-  // "41315242179e9e9e1f3f1f3f06000c0805040c060f0f0f0e000000003d40": { inst: 1, voff: -1 },
-};
+const voiceMap: { [key: string]: { inst: number; voff: number } } = {};
 
-const LW = 32;
-/* resolution of sinc(x) table. sinc(x) where 0.0≦x≦1.0 corresponds to sinc_table[0..SINC_RESO] */
-const SINC_RESO = 256;
-const SINC_AMP_BITS = 12;
-
-function blackman(x: number) {
-  return 0.42 - 0.5 * Math.cos(2 * Math.PI * x) + 0.08 * Math.cos(4 * Math.PI * x);
-}
-function sinc(x: number) {
-  return x == 0.0 ? 1.0 : Math.sin(Math.PI * x) / (Math.PI * x);
-}
-function windowed_sinc(x: number) {
-  return blackman(0.5 + (0.5 * x) / (LW / 2)) * sinc(x);
-}
-
-function lookup_sinc_table(table: Int16Array, x: number) {
-  let index = Math.floor(x * SINC_RESO);
-  if (index < 0) {
-    index = -index;
-  }
-  return table[Math.min((SINC_RESO * LW) / 2 - 1, index)];
-}
-
-/* f_inp: input frequency. f_out: output frequencey, ch: number of channels */
-class RConv {
-  _ratio: number;
-  _buf: Int16Array;
-  _sinc_table: Int16Array;
-  _timer: number = 0;
-  constructor(f_inp: number, f_out: number) {
-    this._ratio = f_inp / f_out;
-    this._buf = new Int16Array(LW);
-    this._sinc_table = new Int16Array((SINC_RESO * LW) / 2);
-    for (let i = 0; i < (SINC_RESO * LW) / 2; i++) {
-      const x = i / SINC_RESO;
-      if (f_out < f_inp) {
-        /* for downsampling */
-        this._sinc_table[i] = ((1 << SINC_AMP_BITS) * windowed_sinc(x / this._ratio)) / this._ratio;
-      } else {
-        /* for upsampling */
-        this._sinc_table[i] = (1 << SINC_AMP_BITS) * windowed_sinc(x);
-      }
-    }
-  }
-
-  reset() {
-    this._timer = 0;
-  }
-
-  /* put original data to this converter at f_inp. */
-  putData(data: number) {
-    for (let i = 0; i < LW - 1; i++) {
-      this._buf[i] = this._buf[i + 1];
-    }
-    this._buf[LW - 1] = data;
-  }
-
-  /* get resampled data from this converter at f_out. */
-  /* this function must be called f_out / f_inp times per one putData call. */
-  getData() {
-    this._timer += this._ratio;
-    const dn = this._timer - Math.floor(this._timer);
-    let sum = 0;
-    for (let k = 0; k < LW; k++) {
-      const x = k - (LW / 2 - 1) - dn;
-      sum += this._buf[k] * lookup_sinc_table(this._sinc_table, x);
-    }
-    return sum >> SINC_AMP_BITS;
-  }
-}
+const useTestMode = false;
+const dacOnly = false;
 
 export default class YM2612ToYM2413Filter implements RegisterFilter {
   _voiceHashMap: { [key: string]: OPNVoice } = {};
@@ -110,52 +40,76 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
     // select FM 9-ch mode
     data.push({ port: 0, a: 14, d: 0 });
 
-    // make sure all channels key-off
-    data.push({ port: 0, a: 38, d: 0 });
-    data.push({ port: 0, a: 39, d: 0 });
-    data.push({ port: 0, a: 40, d: 0 });
+    if (useTestMode) {
+      data.push({ port: 0, a: 15, d: 4 });
+      // SAW
+      data.push({ port: 0, a: 0, d: 0x2c });
+      data.push({ port: 0, a: 1, d: 0x2c });
+      data.push({ port: 0, a: 2, d: 0x28 });
+      data.push({ port: 0, a: 3, d: 0x07 });
+      data.push({ port: 0, a: 4, d: 0xf0 });
+      data.push({ port: 0, a: 5, d: 0xf0 });
+      data.push({ port: 0, a: 6, d: 0x0f });
+      data.push({ port: 0, a: 7, d: 0x0f });
 
-    // select violin tone whose modulator AR is 15.
-    data.push({ port: 0, a: 54, d: (1 << 4) | 15 });
-    data.push({ port: 0, a: 55, d: (1 << 4) | 15 });
-    data.push({ port: 0, a: 56, d: (1 << 4) | 15 });
+      data.push({ port: 0, a: 48, d: 0 });
+      data.push({ port: 0, a: 49, d: 0 });
+      data.push({ port: 0, a: 50, d: 0 });
+      data.push({ port: 0, a: 32, d: 0x1e });
+      data.push({ port: 0, a: 33, d: 0x1e });
+      data.push({ port: 0, a: 34, d: 0x1e });
+      await mod.spfm.writeRegs(mod.slot, data, 1);
+    } else {
+      // make sure all channels key-off
+      data.push({ port: 0, a: 38, d: 0 });
+      data.push({ port: 0, a: 39, d: 0 });
+      data.push({ port: 0, a: 40, d: 0 });
 
-    // set f-number fnum=1 is the most accurate but need longer wait time.
-    const fnum = 8;
-    data.push({ port: 0, a: 22, d: fnum });
-    data.push({ port: 0, a: 23, d: fnum });
-    data.push({ port: 0, a: 24, d: fnum });
+      // select violin tone whose modulator AR is 15.
+      data.push({ port: 0, a: 53, d: (1 << 4) | 15 });
+      data.push({ port: 0, a: 54, d: (1 << 4) | 15 });
+      data.push({ port: 0, a: 55, d: (1 << 4) | 15 });
+      data.push({ port: 0, a: 56, d: (1 << 4) | 15 });
 
-    // start phase generator
-    data.push({ port: 0, a: 38, d: 16 });
-    data.push({ port: 0, a: 39, d: 16 });
-    data.push({ port: 0, a: 40, d: 16 });
-    await mod.spfm.writeRegs(mod.slot, data, 1);
+      // set f-number fnum=1 is the most accurate but need longer wait time.
+      const fnum = 32;
+      data.push({ port: 0, a: 21, d: fnum });
+      data.push({ port: 0, a: 22, d: fnum });
+      data.push({ port: 0, a: 23, d: fnum });
+      data.push({ port: 0, a: 24, d: fnum });
 
-    // wait until 1/4 cycle of phase generator
-    const freq = (fnum * mod.rawClock) / 72 / (1 << 19);
-    const cycleInMillis = 1000 / freq;
-    await new Promise(resolve => setTimeout(resolve, Math.round(cycleInMillis / 4)));
+      // start phase generator
+      data.push({ port: 0, a: 37, d: 16 });
+      data.push({ port: 0, a: 38, d: 16 });
+      data.push({ port: 0, a: 39, d: 16 });
+      data.push({ port: 0, a: 40, d: 16 });
+      await mod.spfm.writeRegs(mod.slot, data, 1);
 
-    // stop phase generator
-    data = [];
-    data.push({ port: 0, a: 22, d: 0 });
-    data.push({ port: 0, a: 23, d: 0 });
-    data.push({ port: 0, a: 24, d: 0 });
+      // wait until 1/4 cycle of phase generator
+      const freq = (fnum * mod.rawClock) / 72 / (1 << 19);
+      const cycleInMillis = 1000 / freq;
+      await new Promise(resolve => setTimeout(resolve, Math.round(cycleInMillis / 4)));
 
-    /** setup user vocie (saw-like sound) */
-    data.push({ port: 0, a: 0, d: 0x21 });
-    data.push({ port: 0, a: 1, d: 0x01 });
-    data.push({ port: 0, a: 2, d: 0x1c });
-    data.push({ port: 0, a: 3, d: 0x07 });
-    data.push({ port: 0, a: 4, d: 0xf0 });
-    data.push({ port: 0, a: 5, d: 0xf4 });
-    data.push({ port: 0, a: 6, d: 0x00 });
-    data.push({ port: 0, a: 7, d: 0x22 });
+      // stop phase generator
+      data = [];
+      data.push({ port: 0, a: 21, d: 0 });
+      data.push({ port: 0, a: 22, d: 0 });
+      data.push({ port: 0, a: 23, d: 0 });
+      data.push({ port: 0, a: 24, d: 0 });
+      await mod.spfm.writeRegs(mod.slot, data, 1);
+      // setup user vocie (saw-like sound)
+      data = [];
+      data.push({ port: 0, a: 0, d: 0x21 });
+      data.push({ port: 0, a: 1, d: 0x01 });
+      data.push({ port: 0, a: 2, d: 0x1c });
+      data.push({ port: 0, a: 3, d: 0x07 });
+      data.push({ port: 0, a: 4, d: 0xf0 });
+      data.push({ port: 0, a: 5, d: 0xf4 });
+      data.push({ port: 0, a: 6, d: 0x00 });
+      data.push({ port: 0, a: 7, d: 0x22 });
+    }
     await mod.spfm.writeRegs(mod.slot, data, 1);
   }
-
-  _prevVS = [0, 0, 0];
 
   _identifyVoice(ch: number) {
     const port = ch < 3 ? 0 : 1;
@@ -198,7 +152,7 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
     if (prevVoice == null || nextHash != prevVoice.hash) {
       const isNew = this._voiceHashMap[nextHash] == null;
       if (isNew) {
-        console.log(`CH${ch},${nextHash}`);
+        // console.log(`CH${ch},${nextHash}`);
       }
       const opnVoice = toOPNVoice(rawVoice);
       this._voiceHashMap[nextHash] = opnVoice;
@@ -242,7 +196,7 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
     }
   }
 
-  _conv = new RConv(4, 2); // For LOW PASS
+  _count = 0;
 
   filterReg(context: any, data: RegisterData): RegisterData[] {
     let result = Array<RegisterData>();
@@ -251,17 +205,21 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
     regs[adr] = data.d;
     if (data.port == 0) {
       if (adr == 0x2a) {
-        const v = Math.min(765, Math.round(data.d * 3));
-        this._conv.putData(v);
-        if (this._div % 4 !== 0) {
-          const idx = Math.max(0, Math.min(765, Math.floor(this._conv.getData())));
-          const vs = YM2413DACTable[idx];
-          for (let i = 0; i < 3; i++) {
-            // Note: differential writing is possible but disable here because it may make jitter on USB serial transfer.
-            // if (this._prevVS[i] != vs[i]) {
-            result.push({ port: 0, a: 56 - i, d: (8 << 4) | vs[i] });
-            this._prevVS[i] = vs[i];
-            // }
+        if (useTestMode) {
+          const v = data.d;
+          if (this._div % 3 !== 0) {
+            const vv = 57 + (208 * v) / 255;
+            result.push({ port: 0, a: 16, d: vv });
+            result.push({ port: 0, a: 17, d: vv });
+            result.push({ port: 0, a: 18, d: vv });
+          }
+        } else {
+          if (this._div % 3 !== 0) {
+            const idx = data.d * 3;
+            const vs = YM2413DACTable[idx & 0x3f8];
+            for (let i = 0; i < 3; i++) {
+              result.push({ port: 0, a: 56 - i, d: (8 << 4) | vs[i] });
+            }
           }
         }
         this._div++;
@@ -322,6 +280,10 @@ export default class YM2612ToYM2413Filter implements RegisterFilter {
         result.push({ port: 0, a: 0x10 + ch, d: dl });
         this._outRegs[0x10 + ch] = dl;
       }
+    }
+
+    if ((dacOnly || useTestMode) && adr != 0x2a) {
+      return [];
     }
 
     return result;
