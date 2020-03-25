@@ -20,7 +20,7 @@ const defaultModulePriority = [
   "ym3526",
   "y8950",
   "ym2413",
-  "ay8190",
+  "ay8910",
   "sn76489"
 ];
 
