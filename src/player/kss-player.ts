@@ -4,9 +4,11 @@ import Player from "./player";
 import AccurateSleeper, { processNodeEventLoop } from "./sleeper";
 import CommandBuffer from "./command-buffer";
 
+const SAMPLE_FREQ = 44100;
+
 export default class KSSPlayer implements Player<KSS> {
   _mapper: SPFMMapper;
-  _kssplay = new KSSPlay(44100);
+  _kssplay = new KSSPlay(SAMPLE_FREQ);
   _index = 0;
   _data?: DataView;
   _eos = false;
@@ -15,6 +17,7 @@ export default class KSSPlayer implements Player<KSS> {
   _speedRatio = 1;
   _buffer = new CommandBuffer();
   _loop = 2;
+  _fadeSamples = 0;
   _song = 0;
 
   constructor(mapper: SPFMMapper) {
@@ -35,6 +38,10 @@ export default class KSSPlayer implements Player<KSS> {
 
   setLoop(loop: number) {
     this._loop = loop;
+  }
+
+  setFadeTime(timeInSec: number): void {
+    this._fadeSamples = Math.round(SAMPLE_FREQ * timeInSec);
   }
 
   stop() {
@@ -101,6 +108,7 @@ export default class KSSPlayer implements Player<KSS> {
 
   async play() {
     const step = 4;
+    let loopOverCount = -1;
     let count = 0;
 
     while (!this._eos) {
@@ -117,7 +125,15 @@ export default class KSSPlayer implements Player<KSS> {
       await this._buffer.flushTo(this._mapper);
       await this._waitSamples(step);
 
-      if (this._kssplay.getStopFlag() || this._kssplay.getLoopCount() >= this._loop) {
+      if (loopOverCount < 0 && this._kssplay.getLoopCount() >= this._loop) {
+        loopOverCount = count;
+      }
+
+      if (0 <= loopOverCount && loopOverCount + this._fadeSamples < count) {
+        this._eos = true;
+      }
+
+      if (this._kssplay.getStopFlag()) {
         this._eos = true;
       }
     }

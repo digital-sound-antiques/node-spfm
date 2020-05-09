@@ -5,5 +5,7 @@ export default interface Player<T> {
   stop(): void;
   setSpeed(speed: number): void;
   setLoop(loop: number): void;
+  /// fade-out is not supported yet.
+  setFadeTime(timeInSec: number): void;
   release(): void;
 }

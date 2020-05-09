@@ -293,6 +293,15 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
       player = new KSSPlayer(mapper);
       player.setData(data);
     }
+    const fadeTime = options["fade-time"];
+    const loopCount = options["loop-count"];
+    if (loopCount) {
+      player.setLoop(loopCount);
+    }
+    if (fadeTime) {
+      player.setFadeTime(fadeTime);
+    }
+
     await player.play();
     sendMessage({ type: "stop", index });
     stdoutSync("\nPlaying finished.\n");
@@ -326,7 +335,9 @@ const optionDefinitions = [
   { name: "song", type: String },
   { name: "force-reset", type: Boolean },
   { name: "simulate-ym2612-dac", type: String },
-  { name: "prioritize", type: String, lazyMultiple: true }
+  { name: "prioritize", type: String, lazyMultiple: true },
+  { name: "loop-count", type: Number },
+  { name: "fade-time", type: Number }
 ];
 
 const options = commandLineArgs(optionDefinitions);

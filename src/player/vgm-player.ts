@@ -97,6 +97,10 @@ export default class VGMPlayer implements Player<VGM> {
     this._loop = loop;
   }
 
+  setFadeTime(timeInSec: number): void {
+    this._fadeSamples = Math.round(44100 * timeInSec);
+  }
+
   stop(): void {
     this._eos = true;
   }
@@ -427,6 +431,7 @@ export default class VGMPlayer implements Player<VGM> {
 
   _headSamples: number = 0;
   _loopSamples: number = 0;
+  _fadeSamples: number = 0;
 
   async _sendProgress(head: number, loop: number) {
     if (process.send) {
@@ -462,7 +467,7 @@ export default class VGMPlayer implements Player<VGM> {
         t = microtime.now();
       }
 
-      if (this._currentFrame > this._headSamples + this._loopSamples) {
+      if (this._currentFrame > this._headSamples + this._loopSamples + this._fadeSamples) {
         this._eos = true;
         return;
       }

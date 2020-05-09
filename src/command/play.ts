@@ -48,12 +48,57 @@ function loadM3UPlayList(file: string) {
     .map(e => dirname + "/" + e);
 }
 
+function buildPlayerProcessOptions(options: commandLineArgs.CommandLineOptions): Array<string> {
+  const child_options = Array<string>();
+  if (options.song) {
+    child_options.push("--song");
+    child_options.push(options.song);
+  }
+  if (options["force-reset"]) {
+    child_options.push("--force-reset");
+  }
+  if (options.prioritize) {
+    for (const p of options.prioritize) {
+      child_options.push("--prioritize");
+      child_options.push(p.toLowerCase());
+    }
+  }
+  if (options["simulate-ym2612-dac"] != null) {
+    const value = options["simulate-ym2612-dac"].toLowerCase();
+    if (["none", "ssg", "adpcm", "adpcm2"].indexOf(value) < 0) {
+      throw new Error(`Invalid parameter: ${value}`);
+    }
+    child_options.push("--simulate-ym2612-dac");
+    child_options.push(value);
+  }
+  if (options["loop-count"] != null) {
+    child_options.push("--loop-count");
+    child_options.push(options["loop-count"]);
+  }
+  if (options["fade-time"] != null) {
+    child_options.push("--fade-time");
+    child_options.push(options["fade-time"]);
+  }
+  return child_options;
+}
+
 export default async function main(argv: string[]) {
   const optionDefinitions = [
     { name: "file", defaultOption: true },
     { name: "song", alias: "s", typeLabel: "{underline num}", description: "KSS subsong number.", type: Number },
     { name: "help", alias: "h", type: Boolean, description: "Show this help." },
     { name: "force-reset", type: Boolean, description: "Always reset device after stop playing." },
+    {
+      name: "fade-time",
+      type: Number,
+      description:
+        "Specify time to continue playing in seconds after the loop count is exceeded. Fade-out works only if implemented (currently none of chips supports it)."
+    },
+    {
+      name: "loop-count",
+      type: Number,
+      description: "Specifies the number of loops to be played."
+    },
     {
       name: "prioritize",
       alias: "p",
@@ -151,29 +196,6 @@ export default async function main(argv: string[]) {
       playlist = [file];
     }
 
-    const child_options: string[] = [];
-    if (options.song) {
-      child_options.push("--song");
-      child_options.push(options.song);
-    }
-    if (options["force-reset"]) {
-      child_options.push("--force-reset");
-    }
-    if (options.prioritize) {
-      for (const p of options.prioritize) {
-        child_options.push("--prioritize");
-        child_options.push(p.toLowerCase());
-      }
-    }
-    if (options["simulate-ym2612-dac"] != null) {
-      const value = options["simulate-ym2612-dac"].toLowerCase();
-      if (["none", "ssg", "adpcm", "adpcm2"].indexOf(value) < 0) {
-        throw new Error(`Invalid parameter: ${value}`);
-      }
-      child_options.push("--simulate-ym2612-dac");
-      child_options.push(value);
-    }
-
     let child: ChildProcess;
     let index = 0;
     let speed = 0;
@@ -226,7 +248,7 @@ export default async function main(argv: string[]) {
     await new Promise((resolve, reject) => {
       try {
         const target = [__dirname, "../play-process"].join("/");
-        child = fork(target, ["--banner", banner, ...child_options, ...playlist]);
+        child = fork(target, ["--banner", banner, ...buildPlayerProcessOptions(options), ...playlist]);
         child.on("message", msg => {
           if (msg.type === "error") {
             console.error(`${chalk.red("Error: " + msg.message)}\n`);
