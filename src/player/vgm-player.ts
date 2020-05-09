@@ -38,8 +38,7 @@ export default class VGMPlayer implements Player<VGM> {
   _loop = 2;
   _options: VGMPlayerOptions;
 
-  _dac2ssg = false;
-  _dac2adpcm = false;
+  _ym2612_2a_to_adpcm = false;
   _ym2612_pcm_lr = 0xc0;
   _ym2612_pcm_offset = 0;
   _ym2612_pcm_data = new Uint8Array(0);
@@ -60,18 +59,22 @@ export default class VGMPlayer implements Player<VGM> {
   constructor(mapper: SPFMMapper, options: VGMPlayerOptions = {}) {
     this._mapper = mapper;
     this._options = options;
-    if (options.ym2612DACEmulationMode === "ssg") {
-      this._dac2ssg = true;
-    }
     const ym2612mod = mapper.getModule("ym2612", 0);
+
+    if (ym2612mod && ym2612mod.rawType === "ym2612") {
+      this._ym2612_2a_to_adpcm = false;
+    }
+    if (options.ym2612DACEmulationMode === "ssg") {
+      this._ym2612_2a_to_adpcm = false;
+    }
     if (ym2612mod && ym2612mod.rawType === "ym2413") {
-      this._dac2ssg = true;
+      this._ym2612_2a_to_adpcm = false;
     }
     if (options.ym2612DACEmulationMode === "adpcm") {
-      this._dac2adpcm = true;
+      this._ym2612_2a_to_adpcm = true;
     }
     if (options.ym2612DACEmulationMode === "adpcm2") {
-      this._dac2adpcm = true;
+      this._ym2612_2a_to_adpcm = true;
     }
   }
 
@@ -246,13 +249,13 @@ export default class VGMPlayer implements Player<VGM> {
 
   async _writeYm2612_2a(n: number) {
     this._waitingFrame += n;
-    if (this._dac2ssg) {
+    if (this._mapper.getModule("ym2612", 0) != null) {
       const index = this._ym2612_pcm_offset;
       if (0 < n && index < this._ym2612_pcm_data.length) {
         await this._mapper.writeReg("ym2612", 0, 0, 0x2a, this._ym2612_pcm_data[index]);
       }
     }
-    if (this._dac2adpcm) {
+    if (this._ym2612_2a_to_adpcm) {
       await this._writeYm2612_2a_adpcm();
     }
     this._ym2612_pcm_offset++;
@@ -298,7 +301,7 @@ export default class VGMPlayer implements Player<VGM> {
 
   async _processYM2612PCMData(cmd: VGMDataBlockCommand) {
     this._ym2612_pcm_data = cmd.blockData;
-    if (this._dac2adpcm) {
+    if (this._ym2612_2a_to_adpcm) {
       const mode2 = this._options.ym2612DACEmulationMode === "adpcm2";
       this._ym2612_dac_info = new YM2612DACAnalyzer(this._data!, {
         splitLimitInSamples: mode2 ? 32 : 735,
