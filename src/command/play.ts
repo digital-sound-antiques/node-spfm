@@ -159,6 +159,7 @@ export default async function main(argv: string[]) {
         "SN76489 (DPSG)",
         "YM2203 (OPN)",
         "YM2608 (OPNA)",
+        "YM2612 (OPN2)",
         "YM2413 (OPLL)",
         "YM3526 (OPL)",
         "YM3812 (OPL2)"
