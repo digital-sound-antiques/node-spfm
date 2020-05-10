@@ -33,18 +33,22 @@ function R(rate: number): number {
   }
 }
 
+function DR(rate: number): number {
+  return [0,6,7,10,12,14,16,18,20,22,24,26,28,30,31,31][rate];
+}
+
 export function OPLLToOPNSlotParam(slot: OPLLSlotParam, car: boolean): OPNSlotParam {
   return {
     dt: 0,
     ml: slot.ml,
     tl: Math.min(127, slot.tl + (slot.wf ? (car ? 8 : 5) : 0)),
     ks: slot.kr * 2,
-    ar: R(slot.ar),
+    ar: DR(slot.ar),
     am: slot.am,
-    dr: R(slot.dr),
-    sr: R(slot.eg ? 0 : slot.rr),
+    dr: DR(slot.dr),
+    sr: DR(slot.eg ? 0 : slot.rr),
     sl: slot.sl,
-    rr: slot.eg ? Math.min(15, slot.rr + 1) : car ? 8 : 0,
+    rr: slot.eg ? Math.min(15, slot.rr) : car ? 6 : 0,
     ssg: 0
   };
 }
