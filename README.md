@@ -1,8 +1,11 @@
-A command-line controller for [SPFM Light](http://www.pyonpyon.jp/~gasshi/fm/spfmlight.html).
+A command-line controller for SPFM Light
 
 ![](./images/node-spfm.png)
 
 This screen shot is node-spfm running under [cool-retro-term](https://github.com/Swordfish90/cool-retro-term).
+
+# Important
+You should not ask SPFM Light 
 
 # Feature
 
