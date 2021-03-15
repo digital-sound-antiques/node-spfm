@@ -5,7 +5,7 @@ A command-line controller for SPFM Light
 This screen shot is node-spfm running under [cool-retro-term](https://github.com/Swordfish90/cool-retro-term).
 
 # Important
-You should not ask SPFM Light 
+This software is not an official product of SPFM Light. If you have any questions about this software, please post them in the Issues section of this repository, and do not ask questions to the developer or distributor of SPFM Light or the Re:Birth module.
 
 # Feature
 
