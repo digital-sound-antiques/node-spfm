@@ -1,6 +1,3 @@
-# node-spfm [![npm version](https://badge.fury.io/js/node-spfm.svg)](https://badge.fury.io/js/node-spfm)
-<img src="https://nodei.co/npm/node-spfm.png?downloads=true&stars=true" alt=""/>
-
 A command-line controller for [SPFM Light](http://www.pyonpyon.jp/~gasshi/fm/spfmlight.html).
 
 ![](./images/node-spfm.png)
