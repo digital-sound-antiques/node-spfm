@@ -1,13 +1,15 @@
 import fs from "fs";
 import path from "path";
-import SPFMMapperConfig from "./spfm-mapper-config";
 import commandLineArgs, { CommandLineOptions } from "command-line-args";
 import zlib from "zlib";
+import { KSS } from "libkss-js";
+import { VGM, formatMinSec, createEmptyGD3TagObject } from "vgm-parser";
+import { S98, convertS98ToVGM } from "s98-to-vgm";
+
+import SPFMMapperConfig from "./spfm-mapper-config";
 import SPFMMapper from "./spfm-mapper";
 import VGMPlayer from "./player/vgm-player";
-import { VGM, formatMinSec, createEmptyGD3TagObject } from "vgm-parser";
 import KSSPlayer from "./player/kss-player";
-import { KSS } from "libkss-js";
 import Player from "./player/player";
 import SPFMModule from "./spfm-module";
 
@@ -25,7 +27,7 @@ const defaultModulePriority = [
 ];
 
 async function stdoutSync(message: string) {
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     process.stdout.write(message, err => {
       resolve();
     });
@@ -69,7 +71,6 @@ Used chips:     ${usedChips.join(", ")}
 }
 
 function getKSSInfoString(file: string, kss: KSS, m3u?: M3UItem) {
-  const title = m3u ? m3u.title || kss.getTitle() : kss.getTitle();
   if (m3u) {
     return `File Name:      ${path.basename(m3u.file)} $${("0" + m3u.song.toString(16)).slice(-2)}(${m3u.song})
 
@@ -179,10 +180,16 @@ function loadFromM3UItem(item: M3UItem): KSS {
 
 function loadFile(file: string, song: number): VGM | KSS {
   const buf = fs.readFileSync(file);
-  if (/\.vg(m|z)$/i.test(file)) {
-    return VGM.parse(toArrayBuffer(buf));
+  const ab = toArrayBuffer(buf);
+  if (/\.s98$/i.test(file)) {
+    const vgm = convertS98ToVGM(S98.parse(ab));
+    return VGM.parse(vgm.build());
   }
-  return new KSS(new Uint8Array(toArrayBuffer(buf)), path.basename(file), song);
+
+  if (/\.vg(m|z)$/i.test(file)) {
+    return VGM.parse(ab);
+  }
+  return new KSS(new Uint8Array(ab), path.basename(file), song);
 }
 
 let playIndex = 0;
@@ -218,7 +225,7 @@ function messageHandler(msg: any) {
 }
 
 async function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(() => resolve(), ms));
+  return new Promise<void>(resolve => setTimeout(() => resolve(), ms));
 }
 
 async function play(index: number, options: CommandLineOptions): Promise<number> {
@@ -342,7 +349,7 @@ const optionDefinitions = [
 
 const options = commandLineArgs(optionDefinitions);
 
-(async function() {
+(async function () {
   let exitCode = 0;
   try {
     while (!quitRequested && 0 <= playIndex && playIndex < options.files.length) {

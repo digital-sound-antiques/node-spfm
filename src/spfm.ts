@@ -59,7 +59,7 @@ export default class SPFM {
     const byteLength = new parsers.ByteLength({ length: 2 });
     const parser = this._port.pipe(byteLength);
     try {
-      await new Promise(async (resolve, reject) => {
+      await new Promise<void>(async (resolve, reject) => {
         setTimeout(async () => {
           reject(`Serial Connection Timeout`);
         }, 1000);
@@ -92,7 +92,7 @@ export default class SPFM {
   }
 
   async open() {
-    return new Promise(async (resolve, reject) => {
+    return new Promise<void>(async (resolve, reject) => {
       this._port.open(async err => {
         if (err) {
           reject(err);
@@ -124,7 +124,7 @@ export default class SPFM {
   }
 
   async close() {
-    return new Promise(async (resolve, reject) => {
+    return new Promise<void>(async (resolve, reject) => {
       if (this._port.isOpen) {
         await this.reset();
         this._port.close(err => {
@@ -139,8 +139,8 @@ export default class SPFM {
     });
   }
 
-  async _write(data: number[]): Promise<boolean> {
-    return new Promise((resolve, reject) => {
+  async _write(data: number[]): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
       this._port.write(data, err => {
         if (err) {
           reject(err);

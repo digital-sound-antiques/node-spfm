@@ -263,7 +263,7 @@ export default class VGMPlayer implements Player<VGM> {
 
   async _RAMWriteProgress(title: string, current: number, total: number) {
     if (process.send) {
-      new Promise(resolve => {
+      new Promise<void>(resolve => {
         process.send!({ type: "ram_write", title, current, total }, () => resolve());
       });
     }
@@ -295,7 +295,7 @@ export default class VGMPlayer implements Player<VGM> {
     const view = new DataView(cmd.blockData.buffer, cmd.blockData.byteOffset);
     const address = view.getUint32(4, true);
     await this._YM2608RAMWrite(0, address, cmd.blockData.slice(8));
-    await new Promise(resolve => setTimeout(() => resolve(), 50));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 50));
     this._sleeper.reset();
   }
 
@@ -309,7 +309,7 @@ export default class VGMPlayer implements Player<VGM> {
         overlapAnalysis: mode2
       }).analyze();
       await this._YM2612toYM2608RAMWrite(0, 0, this._ym2612_dac_info.adpcmData);
-      await new Promise(resolve => setTimeout(() => resolve(), 50));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 50));
       this._sleeper.reset();
     }
   }
@@ -332,7 +332,7 @@ export default class VGMPlayer implements Player<VGM> {
       };
       this._okim6258_block_count++;
       this._okim6258_adpcm_written += adpcm.length;
-      await new Promise(resolve => setTimeout(() => resolve(), 50));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 50));
       this._sleeper.reset();
     }
   }
