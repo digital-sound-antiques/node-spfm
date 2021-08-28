@@ -230,6 +230,7 @@ async function sleep(ms: number) {
 
 async function play(index: number, options: CommandLineOptions): Promise<number> {
   const file = options.files[index];
+  await KSSPlayer.ensureInitialize();
 
   if (!file) {
     throw new Error("Missing argument.");

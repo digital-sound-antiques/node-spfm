@@ -246,7 +246,7 @@ export default async function main(argv: string[]) {
     const banner = getHeaderString(1 < playlist.length, file);
     speed = 0;
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       try {
         const target = [__dirname, "../play-process"].join("/");
         child = fork(target, ["--banner", banner, ...buildPlayerProcessOptions(options), ...playlist]);

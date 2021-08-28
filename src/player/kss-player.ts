@@ -25,6 +25,10 @@ export default class KSSPlayer implements Player<KSS> {
     this._kssplay.setIOWriteHandler(this._ioWriteHandler.bind(this));
   }
 
+  static ensureInitialize(): Promise<void> {
+    return KSSPlay.initialize();
+  }
+
   reset(): void {
     this._index = 0;
     this._eos = false;
