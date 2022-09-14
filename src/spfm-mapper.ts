@@ -10,7 +10,8 @@ import SN76489ClockFilter from "./filter/sn76489-clock-filter";
 import YM2612ToYM2608Filter from "./filter/ym2612-to-ym2608-filter";
 import SN76489ToAY8910Filter from "./filter/sn76489-to-ay8910-filter";
 import SN76489ToYM2203Filter from "./filter/sn76489-to-ym2203-filter";
-import SerialPort from "serialport";
+import { SerialPort } from "serialport";
+import { PortInfo } from '@serialport/bindings-cpp';
 import { OKIM6258ToYM2608Filter } from "./filter/okim6258-to-ym2608-filter";
 import { OKIM6258ClockFilter } from "./filter/okim6258-clock-filter";
 import YM2413ToYM2608Filter from "./filter/ym2413-to-ym2608-filter";
@@ -245,7 +246,7 @@ function checkModuleAlive(mod: SPFMModuleInfo, used: SPFMModuleInfo) {
 }
 
 function findTargets(
-  ports: SerialPort.PortInfo[],
+  ports: PortInfo[],
   directModules: SPFMModuleInfo[],
   compatModules: SPFMModuleInfo[],
   modulesToOpen: { type: string; clock: number }[]
@@ -296,7 +297,7 @@ function makeCombinations<T>(array: T[], nestLimit: number = 0): T[][] {
 }
 
 function findOptimalTargets(
-  ports: SerialPort.PortInfo[],
+  ports: PortInfo[],
   directModules: SPFMModuleInfo[],
   compatModules: SPFMModuleInfo[],
   modulesToOpen: { type: string; clock: number }[],
@@ -373,7 +374,7 @@ export default class SPFMMapper {
           this._spfmModuleMap[target.type].push(mod);
         }
       } catch (e) {
-        console.info(e.message);
+        console.info(e);
       }
     }
     return this._spfmModuleMap;

@@ -5,11 +5,6 @@
     "outDir": "./dist",
     "strict": true,
     "baseUrl": "./",
-    "paths": {
-      "serialport": [
-        "typings/serialport/index.d.ts"
-      ]
-    },
     "esModuleInterop": true
   }
 }

@@ -2,7 +2,7 @@ import SPFM from "./spfm";
 import { RegisterFilter, RegisterFilterBuilder, RegisterData } from "./filter/register-filter";
 
 async function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(() => resolve(), ms));
+  return new Promise<void>(resolve => setTimeout(() => resolve(), ms));
 }
 
 export type SPFMModuleInfo = {

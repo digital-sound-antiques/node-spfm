@@ -313,7 +313,7 @@ async function play(index: number, options: CommandLineOptions): Promise<number>
     await player.play();
     sendMessage({ type: "stop", index });
     stdoutSync("\nPlaying finished.\n");
-  } catch (e) {
+  } catch (e: any) {
     sendMessage({ type: "error", message: e.message });
     if (options.files.length === 1) {
       throw e;

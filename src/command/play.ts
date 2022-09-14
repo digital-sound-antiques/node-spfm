@@ -250,7 +250,7 @@ export default async function main(argv: string[]) {
       try {
         const target = [__dirname, "../play-process"].join("/");
         child = fork(target, ["--banner", banner, ...buildPlayerProcessOptions(options), ...playlist]);
-        child.on("message", msg => {
+        child.on("message", (msg: any) => {
           if (msg.type === "error") {
             console.error(`${chalk.red("Error: " + msg.message)}\n`);
           } else if (msg.type === "warn") {

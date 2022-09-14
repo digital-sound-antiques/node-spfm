@@ -38,7 +38,7 @@ export default class AccurateSleeper {
 }
 
 export async function processNodeEventLoop() {
-  return new Promise(resolve => {
+  return new Promise<void>(resolve => {
     setImmediate(() => resolve());
   });
 }

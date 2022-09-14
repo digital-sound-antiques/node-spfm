@@ -1,8 +1,10 @@
-import SerialPort, { parsers } from "serialport";
+import { SerialPort } from "serialport";
+import { PortInfo } from '@serialport/bindings-cpp';
+import { ByteLengthParser } from '@serialport/parser-byte-length';
 
 export type SPFMType = "SPFM" | "SPFM_Light" | null;
 
-export type SPFMPortInfo = SerialPort.PortInfo & {
+export type SPFMPortInfo = PortInfo & {
   type: SPFMType;
 };
 
@@ -16,7 +18,8 @@ export default class SPFM {
   constructor(path: string, baudRate: number = 1500000) {
     this.path = path;
     this.baudRate = baudRate;
-    this._port = new SerialPort(path, {
+    this._port = new SerialPort({
+      path: path,
       baudRate: this.baudRate,
       dataBits: 8,
       parity: "none",
@@ -28,10 +31,11 @@ export default class SPFM {
       highWaterMark: 256 * 1024,
       autoOpen: false
     });
-    this._port.setEncoding("utf-8");
+    // TODO 確認
+    // this._port.setEncoding("utf-8");
   }
 
-  static async rawList(): Promise<SerialPort.PortInfo[]> {
+  static async rawList(): Promise<PortInfo[]> {
     return (await SerialPort.list()).filter(p => p.vendorId === "0403");
   }
 
@@ -44,7 +48,7 @@ export default class SPFM {
         await spfm.open();
         result.push({ ...portInfo, type: spfm.type });
         await spfm.close();
-      } catch (e) {
+      } catch (e: any) {
         console.error(e.message); // not a SPFM or permission denied.
       }
     }
@@ -56,7 +60,7 @@ export default class SPFM {
   }
 
   async _identify() {
-    const byteLength = new parsers.ByteLength({ length: 2 });
+    const byteLength = new ByteLengthParser({ length: 2 });
     const parser = this._port.pipe(byteLength);
     try {
       await new Promise<void>(async (resolve, reject) => {

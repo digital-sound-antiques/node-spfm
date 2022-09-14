@@ -63,7 +63,7 @@ export default async function main(argv: string[]) {
     } else {
       console.info(usage);
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error(e.message);
   }
 }
